@@ -1,0 +1,53 @@
+"""Domain model exports."""
+
+from rhine_vault.domain.capture import (
+    BatchReviewItem,
+    CaptureProposal,
+    ConversationCaptureProposal,
+    DocumentImportJob,
+    ProjectImportJob,
+    ProposedNode,
+    ProposedRelation,
+    SourceRecord,
+)
+from rhine_vault.domain.models import (
+    ActorContext,
+    AuditEvent,
+    ChangeSet,
+    ChunkingProfile,
+    ExternalChange,
+    IndexJob,
+    MemoryNode,
+    NodeRelation,
+    NodeRevision,
+    NodeSource,
+    RetrievalProfile,
+    StagingEntry,
+    ValidationIssue,
+    Workspace,
+)
+
+__all__ = [
+    "ActorContext",
+    "AuditEvent",
+    "BatchReviewItem",
+    "CaptureProposal",
+    "ChangeSet",
+    "ChunkingProfile",
+    "ConversationCaptureProposal",
+    "DocumentImportJob",
+    "ExternalChange",
+    "IndexJob",
+    "MemoryNode",
+    "NodeRelation",
+    "NodeRevision",
+    "NodeSource",
+    "ProjectImportJob",
+    "ProposedNode",
+    "ProposedRelation",
+    "RetrievalProfile",
+    "SourceRecord",
+    "StagingEntry",
+    "ValidationIssue",
+    "Workspace",
+]

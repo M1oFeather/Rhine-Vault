@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rhine-Vault</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f6f7f9;
+      color: #1d232b;
+    }
+    header {
+      padding: 18px 24px;
+      border-bottom: 1px solid #d9dee7;
+      background: #ffffff;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: calc(100vh - 64px);
+    }
+    nav {
+      padding: 16px;
+      border-right: 1px solid #d9dee7;
+      background: #ffffff;
+    }
+    button {
+      width: 100%;
+      margin: 4px 0;
+      padding: 9px 10px;
+      border: 1px solid #bcc5d2;
+      background: #fff;
+      border-radius: 6px;
+      text-align: left;
+      cursor: pointer;
+    }
+    button:hover { background: #eef3f8; }
+    section { padding: 18px 22px; display: none; }
+    section.active { display: block; }
+    textarea, input {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 6px 0 12px;
+      padding: 8px;
+      border: 1px solid #bcc5d2;
+      border-radius: 6px;
+      background: #fff;
+    }
+    textarea { min-height: 130px; }
+    pre {
+      white-space: pre-wrap;
+      background: #fff;
+      border: 1px solid #d9dee7;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .action {
+      background: #233043;
+      color: #fff;
+      border-color: #233043;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header><strong>Rhine-Vault Phase 1.5</strong></header>
+  <main>
+    <nav>
+      <button onclick="show('manual')">Manual Node Editor</button>
+      <button onclick="show('conversation')">Conversation Capture</button>
+      <button onclick="show('document')">Document Import</button>
+      <button onclick="show('project')">Project Import</button>
+      <button onclick="show('review')">Proposal Review</button>
+      <button onclick="show('search')">Search Lab</button>
+      <button onclick="show('context')">Context Bundle</button>
+      <button onclick="show('llm')">LLM Playground</button>
+    </nav>
+    <div>
+      <section id="manual" class="active">
+        <h2>Manual Node Editor</h2>
+        <input id="manual-title" placeholder="Title">
+        <input id="manual-type" placeholder="Node type" value="Note">
+        <textarea id="manual-content" placeholder="Markdown content"></textarea>
+        <button class="action" onclick="manual()">Save Proposal</button>
+      </section>
+      <section id="conversation">
+        <h2>Conversation Capture</h2>
+        <textarea id="conversation-content">Agent can submit staging but cannot approve formal knowledge. Obsidian changes must enter ExternalChange review.</textarea>
+        <button class="action" onclick="conversation()">Extract</button>
+      </section>
+      <section id="document">
+        <h2>Document Import</h2>
+        <input id="document-path" placeholder="Markdown/TXT path">
+        <button class="action" onclick="documentImport()">Import</button>
+      </section>
+      <section id="project">
+        <h2>Project Import</h2>
+        <input id="project-root" placeholder="Project root">
+        <button class="action" onclick="projectScan()">Scan</button>
+      </section>
+      <section id="review">
+        <h2>Proposal Review</h2>
+        <button class="action" onclick="loadProposals()">Load Proposals</button>
+        <input id="review-proposal-id" placeholder="Proposal ID">
+        <input id="review-temp-ids" placeholder="Temporary IDs, comma separated">
+        <button class="action" onclick="stageProposal()">Save Staging</button>
+        <input id="review-entry-ids" placeholder="Staging entry IDs, comma separated">
+        <button class="action" onclick="approveStaging()">Approve Staging</button>
+        <button class="action" onclick="rejectProposal()">Reject Proposal</button>
+      </section>
+      <section id="search">
+        <h2>Search Lab</h2>
+        <input id="search-query" placeholder="Query">
+        <button class="action" onclick="search()">Search</button>
+      </section>
+      <section id="context">
+        <h2>Context Bundle Viewer</h2>
+        <input id="context-query" placeholder="Question">
+        <button class="action" onclick="contextBundle()">Build</button>
+      </section>
+      <section id="llm">
+        <h2>LLM Playground</h2>
+        <input id="llm-query" placeholder="Question">
+        <button class="action" onclick="fakeLLM()">Ask FakeLLM</button>
+      </section>
+      <pre id="output"></pre>
+    </div>
+  </main>
+  <script>
+    const workspace_id = "demo-workspace";
+    function show(id) {
+      document.querySelectorAll("section").forEach((section) => {
+        section.classList.remove("active");
+      });
+      document.getElementById(id).classList.add("active");
+    }
+    async function post(url, body) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body)
+      });
+      out(await res.json());
+    }
+    function out(value) {
+      document.getElementById("output").textContent = JSON.stringify(value, null, 2);
+    }
+    function manual() {
+      post("/api/manual", {
+        workspace_id,
+        title: val("manual-title"),
+        node_type: val("manual-type"),
+        content: val("manual-content")
+      });
+    }
+    function conversation() {
+      post("/api/conversations/capture", {
+        workspace_id,
+        session_id: "ui-session",
+        messages: [
+          {message_id: "m1", role: "user", content: val("conversation-content")}
+        ]
+      });
+    }
+    function documentImport() {
+      post("/api/documents/import", {workspace_id, path: val("document-path")});
+    }
+    function projectScan() {
+      post("/api/projects/scan", {workspace_id, root: val("project-root")});
+    }
+    async function loadProposals() {
+      const res = await fetch(`/api/proposals?workspace_id=${workspace_id}`);
+      out(await res.json());
+    }
+    function stageProposal() {
+      post(`/api/proposals/${val("review-proposal-id")}/stage`, {
+        workspace_id,
+        temporary_ids: splitIds("review-temp-ids")
+      });
+    }
+    function approveStaging() {
+      post("/api/staging/approve", {
+        workspace_id,
+        entry_ids: splitIds("review-entry-ids")
+      });
+    }
+    function rejectProposal() {
+      post(`/api/proposals/${val("review-proposal-id")}/reject`, {workspace_id});
+    }
+    function search() {
+      post("/api/search", {workspace_id, query: val("search-query")});
+    }
+    function contextBundle() {
+      post("/api/context", {workspace_id, query: val("context-query")});
+    }
+    function fakeLLM() {
+      post("/api/llm/fake", {workspace_id, query: val("llm-query")});
+    }
+    function val(id) {
+      return document.getElementById(id).value;
+    }
+    function splitIds(id) {
+      return val(id).split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Rhine-Vault MemoryNode
+type: object
+required:
+  - node_id
+  - workspace_id
+  - node_type
+  - title
+  - status
+  - revision
+  - schema_version
+  - created_at
+  - updated_at
+properties:
+  node_id:
+    type: string
+    pattern: "^[a-z0-9][a-z0-9._-]{1,126}[a-z0-9]$"
+  workspace_id:
+    type: string
+    pattern: "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+  node_type:
+    type: string
+    minLength: 1
+  title:
+    type: string
+    minLength: 1
+  status:
+    enum: [active, deprecated, archived, superseded]
+  revision:
+    type: integer
+    minimum: 1
+  schema_version:
+    type: integer
+    minimum: 1
+  tags:
+    type: array
+    items:
+      type: string
+  relations:
+    type: array
+    items:
+      type: object
+      required: [target, type, direction]
+      properties:
+        target:
+          type: string
+        type:
+          type: string
+        direction:
+          enum: [outgoing, incoming, bidirectional]
+        description:
+          type: [string, "null"]
+  source:
+    type: object
+    properties:
+      type:
+        type: string
+      origin:
+        type: [string, "null"]
+      reference:
+        type: [string, "null"]
+  created_at:
+    type: string
+    format: date-time
+  updated_at:
+    type: string
+    format: date-time
+additionalProperties: false

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rhine-vault"
+version = "0.1.0"
+description = "Local-first knowledge vault primitives for Rhine-Vault Phase 0-1."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.125,<1",
+  "pydantic>=2.12,<3",
+  "uvicorn>=0.38,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28",
+  "mypy>=1.18",
+  "pre-commit>=4.0",
+  "pytest>=8.0",
+  "ruff>=0.14",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rhine_vault"]
+artifacts = ["src/rhine_vault/api/static/index.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["rhine_vault"]
