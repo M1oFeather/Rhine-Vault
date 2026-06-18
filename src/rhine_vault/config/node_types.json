@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "extension_policy": {
+    "mode": "approval_required",
+    "future_entrypoints": ["settings", "conversation"]
+  },
+  "node_types": [
+    {
+      "id": "Note",
+      "display_name": {
+        "zh": "笔记",
+        "en": "Note"
+      },
+      "description": {
+        "zh": "通用知识记录。",
+        "en": "General knowledge note."
+      }
+    },
+    {
+      "id": "Constraint",
+      "display_name": {
+        "zh": "约束",
+        "en": "Constraint"
+      },
+      "description": {
+        "zh": "必须遵守的规则、边界或限制。",
+        "en": "Rule, boundary, or limitation that must be followed."
+      }
+    },
+    {
+      "id": "ImportedDocumentSection",
+      "display_name": {
+        "zh": "导入文档章节",
+        "en": "Imported document section"
+      },
+      "description": {
+        "zh": "从 Markdown/TXT 文档导入的章节候选知识。",
+        "en": "Candidate knowledge imported from a Markdown/TXT document section."
+      }
+    },
+    {
+      "id": "ProjectOverview",
+      "display_name": {
+        "zh": "项目概览",
+        "en": "Project overview"
+      },
+      "description": {
+        "zh": "从项目文件中提取的项目级摘要。",
+        "en": "Project-level summary extracted from project files."
+      }
+    },
+    {
+      "id": "ModuleMap",
+      "display_name": {
+        "zh": "模块映射",
+        "en": "Module map"
+      },
+      "description": {
+        "zh": "从源码或目录结构中提取的模块职责映射。",
+        "en": "Module responsibility map extracted from source or directory structure."
+      }
+    }
+  ]
+}

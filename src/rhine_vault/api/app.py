@@ -8,21 +8,36 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from rhine_vault.capture.service import CaptureService
 from rhine_vault.context import build_context_bundle
+from rhine_vault.i18n import (
+    DEFAULT_LOCALE,
+    SUPPORTED_LOCALES,
+    normalize_locale,
+    translation_catalog,
+)
 from rhine_vault.llm import FakeLLMProvider, OpenAICompatibleProvider
+from rhine_vault.node_types import node_type_config
 from rhine_vault.storage.sqlite import SQLiteStore
 
 
 class ManualNodeRequest(BaseModel):
     workspace_id: str
-    title: str
-    node_type: str
+    title: str = Field(min_length=1)
+    node_type: str = Field(min_length=1)
     content: str
     authority: str = "approved"
     tags: tuple[str, ...] = ()
+
+    @field_validator("title", "node_type")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("value cannot be empty")
+        return cleaned
 
 
 class ConversationMessage(BaseModel):
@@ -84,6 +99,20 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
     def index() -> str:
         return (Path(__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
 
+    @app.get("/api/i18n")
+    def i18n(locale: str | None = None) -> dict[str, object]:
+        selected = normalize_locale(locale)
+        return {
+            "locale": selected,
+            "default_locale": DEFAULT_LOCALE,
+            "supported_locales": list(SUPPORTED_LOCALES),
+            "messages": translation_catalog(selected),
+        }
+
+    @app.get("/api/node-types")
+    def node_types(locale: str | None = None) -> dict[str, object]:
+        return node_type_config(locale)
+
     @app.post("/api/manual")
     def manual(request: ManualNodeRequest) -> dict[str, Any]:
         return capture.create_manual_proposal(**request.model_dump())
@@ -133,6 +162,10 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
             proposal_id=proposal_id,
             temporary_ids=request.temporary_ids,
         )
+
+    @app.get("/api/staging")
+    def staging(workspace_id: str, status: str | None = "pending") -> list[dict[str, Any]]:
+        return store.list_staging(workspace_id=workspace_id, status=status)
 
     @app.post("/api/proposals/{proposal_id}/reject")
     def reject(proposal_id: str, request: RejectRequest) -> dict[str, Any]:

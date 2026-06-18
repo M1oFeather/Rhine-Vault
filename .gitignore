@@ -9,3 +9,25 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+site/
+
+# Local IDE state
+.idea/
+
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+
+# Codex / AI collaboration workspace files
+# Legacy root guards. Active local copies live under docs/local/.
+AGENTS.md
+TASK.md
+HOW_TO_USE.md
+PACKAGE_MANIFEST.json
+PROMPTS/
+reference-packages/
+docs/local/
+docs/discussion/
+docs/templates/
+docs/implementation/CHANGELOG_PENDING.md

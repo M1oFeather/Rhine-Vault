@@ -1,5 +1,5 @@
-<!doctype html>
-<html lang="en">
+﻿<!doctype html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,11 +7,15 @@
   <style>
     body {
       margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
       background: #f6f7f9;
       color: #1d232b;
     }
     header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
       padding: 18px 24px;
       border-bottom: 1px solid #d9dee7;
       background: #ffffff;
@@ -39,8 +43,7 @@
     button:hover { background: #eef3f8; }
     section { padding: 18px 22px; display: none; }
     section.active { display: block; }
-    textarea, input {
-      width: 100%;
+    textarea, input, select {
       box-sizing: border-box;
       margin: 6px 0 12px;
       padding: 8px;
@@ -48,7 +51,36 @@
       border-radius: 6px;
       background: #fff;
     }
+    textarea, input, section select { width: 100%; }
     textarea { min-height: 130px; }
+    select[multiple] { min-height: 112px; }
+    .field-label {
+      display: block;
+      margin-top: 6px;
+      color: #4b5665;
+      font-size: 13px;
+    }
+    .inline-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .message-list {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0 12px;
+    }
+    .message-item {
+      border: 1px solid #d9dee7;
+      border-radius: 6px;
+      background: #fff;
+      padding: 8px 10px;
+    }
+    .message-role {
+      color: #4b5665;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
     pre {
       white-space: pre-wrap;
       background: #fff;
@@ -62,74 +94,190 @@
       border-color: #233043;
       text-align: center;
     }
+    .locale-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .locale-control select {
+      min-width: 112px;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
-  <header><strong>Rhine-Vault Phase 1.5</strong></header>
+  <header>
+    <strong data-i18n="app.title">Rhine-Vault Phase 1.5</strong>
+    <label class="locale-control">
+      <span data-i18n="language.label">语言</span>
+      <select id="locale-select" onchange="applyLocale(this.value)">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+  </header>
   <main>
     <nav>
-      <button onclick="show('manual')">Manual Node Editor</button>
-      <button onclick="show('conversation')">Conversation Capture</button>
-      <button onclick="show('document')">Document Import</button>
-      <button onclick="show('project')">Project Import</button>
-      <button onclick="show('review')">Proposal Review</button>
-      <button onclick="show('search')">Search Lab</button>
-      <button onclick="show('context')">Context Bundle</button>
-      <button onclick="show('llm')">LLM Playground</button>
+      <button onclick="show('manual')" data-i18n="nav.manual">手动节点编辑</button>
+      <button onclick="show('conversation')" data-i18n="nav.conversation">对话采集</button>
+      <button onclick="show('document')" data-i18n="nav.document">文档导入</button>
+      <button onclick="show('project')" data-i18n="nav.project">项目导入</button>
+      <button onclick="show('review')" data-i18n="nav.review">候选知识审核</button>
+      <button onclick="show('search')" data-i18n="nav.search">搜索实验台</button>
+      <button onclick="show('context')" data-i18n="nav.context">Context Bundle</button>
+      <button onclick="show('llm')" data-i18n="nav.llm">LLM 调试台</button>
     </nav>
     <div>
       <section id="manual" class="active">
-        <h2>Manual Node Editor</h2>
-        <input id="manual-title" placeholder="Title">
-        <input id="manual-type" placeholder="Node type" value="Note">
-        <textarea id="manual-content" placeholder="Markdown content"></textarea>
-        <button class="action" onclick="manual()">Save Proposal</button>
+        <h2 data-i18n="manual.title">手动节点编辑</h2>
+        <input id="manual-title" data-i18n-placeholder="manual.title.placeholder" placeholder="标题">
+        <label class="field-label" for="manual-type" data-i18n="manual.type.label">节点类型</label>
+        <select id="manual-type"></select>
+        <textarea id="manual-content" data-i18n-placeholder="manual.content.placeholder" placeholder="Markdown 内容"></textarea>
+        <button class="action" onclick="manual()" data-i18n="manual.save">保存为候选知识</button>
       </section>
       <section id="conversation">
-        <h2>Conversation Capture</h2>
-        <textarea id="conversation-content">Agent can submit staging but cannot approve formal knowledge. Obsidian changes must enter ExternalChange review.</textarea>
-        <button class="action" onclick="conversation()">Extract</button>
+        <h2 data-i18n="conversation.title">对话采集</h2>
+        <label class="field-label" for="conversation-session" data-i18n="conversation.session.label">会话 ID</label>
+        <input id="conversation-session" value="ui-session">
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="conversation.role.label">角色</span>
+            <select id="conversation-role">
+              <option value="user" data-i18n="conversation.role.user">用户</option>
+              <option value="assistant" data-i18n="conversation.role.assistant">助手</option>
+              <option value="system" data-i18n="conversation.role.system">系统</option>
+            </select>
+          </label>
+        </div>
+        <textarea id="conversation-message" data-i18n-placeholder="conversation.message.placeholder" placeholder="输入一条对话消息"></textarea>
+        <button class="action" onclick="addConversationMessage()" data-i18n="conversation.add">添加消息</button>
+        <button onclick="clearConversationMessages()" data-i18n="conversation.clear">清空消息</button>
+        <div id="conversation-messages" class="message-list"></div>
+        <button class="action" onclick="conversation()" data-i18n="conversation.capture">采集对话</button>
       </section>
       <section id="document">
-        <h2>Document Import</h2>
-        <input id="document-path" placeholder="Markdown/TXT path">
-        <button class="action" onclick="documentImport()">Import</button>
+        <h2 data-i18n="document.title">文档导入</h2>
+        <input id="document-path" data-i18n-placeholder="document.path.placeholder" placeholder="Markdown/TXT 文件路径">
+        <button class="action" onclick="documentImport()" data-i18n="document.import">导入</button>
       </section>
       <section id="project">
-        <h2>Project Import</h2>
-        <input id="project-root" placeholder="Project root">
-        <button class="action" onclick="projectScan()">Scan</button>
+        <h2 data-i18n="project.title">项目导入</h2>
+        <input id="project-root" data-i18n-placeholder="project.root.placeholder" placeholder="项目根目录">
+        <button class="action" onclick="projectScan()" data-i18n="project.scan">扫描</button>
       </section>
       <section id="review">
-        <h2>Proposal Review</h2>
-        <button class="action" onclick="loadProposals()">Load Proposals</button>
-        <input id="review-proposal-id" placeholder="Proposal ID">
-        <input id="review-temp-ids" placeholder="Temporary IDs, comma separated">
-        <button class="action" onclick="stageProposal()">Save Staging</button>
-        <input id="review-entry-ids" placeholder="Staging entry IDs, comma separated">
-        <button class="action" onclick="approveStaging()">Approve Staging</button>
-        <button class="action" onclick="rejectProposal()">Reject Proposal</button>
+        <h2 data-i18n="review.title">候选知识审核</h2>
+        <button class="action" onclick="loadProposals()" data-i18n="review.load">加载候选知识</button>
+        <label class="field-label" for="review-proposal-select" data-i18n="review.proposal.label">选择 proposal</label>
+        <select id="review-proposal-select" onchange="selectProposal()"></select>
+        <label class="field-label" for="review-temp-select" data-i18n="review.temp_ids.label">选择候选节点</label>
+        <select id="review-temp-select" multiple></select>
+        <button class="action" onclick="stageProposal()" data-i18n="review.stage">保存为 staging</button>
+        <button class="action" onclick="loadStaging()" data-i18n="review.load_staging">加载 staging</button>
+        <label class="field-label" for="review-entry-select" data-i18n="review.entry_ids.label">选择 staging 条目</label>
+        <select id="review-entry-select" multiple></select>
+        <button class="action" onclick="approveStaging()" data-i18n="review.approve">批准 staging</button>
+        <button class="action" onclick="rejectProposal()" data-i18n="review.reject">驳回 proposal</button>
       </section>
       <section id="search">
-        <h2>Search Lab</h2>
-        <input id="search-query" placeholder="Query">
-        <button class="action" onclick="search()">Search</button>
+        <h2 data-i18n="search.title">搜索实验台</h2>
+        <input id="search-query" data-i18n-placeholder="search.query.placeholder" placeholder="查询">
+        <button class="action" onclick="search()" data-i18n="search.submit">搜索</button>
       </section>
       <section id="context">
-        <h2>Context Bundle Viewer</h2>
-        <input id="context-query" placeholder="Question">
-        <button class="action" onclick="contextBundle()">Build</button>
+        <h2 data-i18n="context.title">Context Bundle 查看器</h2>
+        <input id="context-query" data-i18n-placeholder="context.query.placeholder" placeholder="问题">
+        <button class="action" onclick="contextBundle()" data-i18n="context.build">构建</button>
       </section>
       <section id="llm">
-        <h2>LLM Playground</h2>
-        <input id="llm-query" placeholder="Question">
-        <button class="action" onclick="fakeLLM()">Ask FakeLLM</button>
+        <h2 data-i18n="llm.title">LLM 调试台</h2>
+        <input id="llm-query" data-i18n-placeholder="llm.query.placeholder" placeholder="问题">
+        <button class="action" onclick="fakeLLM()" data-i18n="llm.ask">询问 FakeLLM</button>
       </section>
-      <pre id="output"></pre>
+      <pre id="output" data-i18n="output.placeholder">结果会显示在这里。</pre>
     </div>
   </main>
   <script>
     const workspace_id = "demo-workspace";
+    const DEFAULT_LOCALE = "zh";
+    const SUPPORTED_LOCALES = ["zh", "en"];
+    let cachedProposals = [];
+    let currentMessages = {};
+    let conversationMessages = [];
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll("[data-i18n-default]").forEach((element) => {
+        element.addEventListener("input", () => {
+          element.dataset.touched = "true";
+        });
+      });
+      const storedLocale = localStorage.getItem("rhine-vault-locale") || DEFAULT_LOCALE;
+      applyLocale(storedLocale);
+    });
+
+    function normalizeLocale(locale) {
+      return SUPPORTED_LOCALES.includes(locale) ? locale : DEFAULT_LOCALE;
+    }
+
+    async function applyLocale(locale) {
+      const selected = normalizeLocale(locale);
+      const response = await fetch(`/api/i18n?locale=${selected}`);
+      if (!response.ok) {
+        return;
+      }
+      const catalog = await response.json();
+      const messages = catalog.messages;
+      currentMessages = messages;
+      document.documentElement.lang = catalog.locale === "zh" ? "zh-CN" : "en";
+      document.getElementById("locale-select").value = catalog.locale;
+      localStorage.setItem("rhine-vault-locale", catalog.locale);
+
+      document.querySelectorAll("[data-i18n]").forEach((element) => {
+        const key = element.dataset.i18n;
+        if (messages[key]) {
+          element.textContent = messages[key];
+        }
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
+        const key = element.dataset.i18nPlaceholder;
+        if (messages[key]) {
+          element.setAttribute("placeholder", messages[key]);
+        }
+      });
+      document.querySelectorAll("[data-i18n-default]").forEach((element) => {
+        const key = element.dataset.i18nDefault;
+        if (messages[key] && !element.dataset.touched) {
+          element.value = messages[key];
+        }
+      });
+      seedConversationMessages();
+      renderConversationMessages();
+      loadNodeTypes(catalog.locale);
+    }
+
+    async function loadNodeTypes(locale) {
+      const response = await fetch(`/api/node-types?locale=${locale}`);
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      const select = document.getElementById("manual-type");
+      const selectedValue = select.value || "Note";
+      select.replaceChildren();
+      payload.node_types.forEach((nodeType) => {
+        const option = document.createElement("option");
+        option.value = nodeType.id;
+        option.textContent = nodeType.display_name;
+        option.title = nodeType.description;
+        select.appendChild(option);
+      });
+      if (Array.from(select.options).some((option) => option.value === selectedValue)) {
+        select.value = selectedValue;
+      }
+    }
+
     function show(id) {
       document.querySelectorAll("section").forEach((section) => {
         section.classList.remove("active");
@@ -148,6 +296,10 @@
       document.getElementById("output").textContent = JSON.stringify(value, null, 2);
     }
     function manual() {
+      if (!val("manual-title").trim()) {
+        out({error: currentMessage("manual.title.required")});
+        return;
+      }
       post("/api/manual", {
         workspace_id,
         title: val("manual-title"),
@@ -155,13 +307,64 @@
         content: val("manual-content")
       });
     }
+    function seedConversationMessages() {
+      if (conversationMessages.length > 0 || !currentMessages["conversation.seed.user"]) {
+        return;
+      }
+      conversationMessages = [
+        {
+          message_id: "m1",
+          role: "user",
+          content: currentMessages["conversation.seed.user"]
+        },
+        {
+          message_id: "m2",
+          role: "assistant",
+          content: currentMessages["conversation.seed.assistant"]
+        }
+      ];
+    }
+    function addConversationMessage() {
+      const content = val("conversation-message").trim();
+      if (!content) {
+        return;
+      }
+      conversationMessages.push({
+        message_id: `m${conversationMessages.length + 1}`,
+        role: val("conversation-role"),
+        content
+      });
+      document.getElementById("conversation-message").value = "";
+      renderConversationMessages();
+    }
+    function clearConversationMessages() {
+      conversationMessages = [];
+      renderConversationMessages();
+    }
+    function renderConversationMessages() {
+      const container = document.getElementById("conversation-messages");
+      container.replaceChildren();
+      conversationMessages.forEach((message) => {
+        const item = document.createElement("div");
+        item.className = "message-item";
+        const role = document.createElement("div");
+        role.className = "message-role";
+        role.textContent = `${message.message_id} · ${message.role}`;
+        const content = document.createElement("div");
+        content.textContent = message.content;
+        item.append(role, content);
+        container.appendChild(item);
+      });
+    }
     function conversation() {
+      if (conversationMessages.length === 0) {
+        out({error: currentMessage("conversation.empty")});
+        return;
+      }
       post("/api/conversations/capture", {
         workspace_id,
-        session_id: "ui-session",
-        messages: [
-          {message_id: "m1", role: "user", content: val("conversation-content")}
-        ]
+        session_id: val("conversation-session") || "ui-session",
+        messages: conversationMessages
       });
     }
     function documentImport() {
@@ -172,22 +375,32 @@
     }
     async function loadProposals() {
       const res = await fetch(`/api/proposals?workspace_id=${workspace_id}`);
-      out(await res.json());
+      const proposals = await res.json();
+      cachedProposals = proposals;
+      populateProposalOptions(proposals);
+      out(proposals);
     }
     function stageProposal() {
-      post(`/api/proposals/${val("review-proposal-id")}/stage`, {
+      const proposalId = val("review-proposal-select");
+      post(`/api/proposals/${proposalId}/stage`, {
         workspace_id,
-        temporary_ids: splitIds("review-temp-ids")
+        temporary_ids: selectedValues("review-temp-select")
       });
+    }
+    async function loadStaging() {
+      const res = await fetch(`/api/staging?workspace_id=${workspace_id}`);
+      const entries = await res.json();
+      populateStagingOptions(entries);
+      out(entries);
     }
     function approveStaging() {
       post("/api/staging/approve", {
         workspace_id,
-        entry_ids: splitIds("review-entry-ids")
+        entry_ids: selectedValues("review-entry-select")
       });
     }
     function rejectProposal() {
-      post(`/api/proposals/${val("review-proposal-id")}/reject`, {workspace_id});
+      post(`/api/proposals/${val("review-proposal-select")}/reject`, {workspace_id});
     }
     function search() {
       post("/api/search", {workspace_id, query: val("search-query")});
@@ -201,8 +414,52 @@
     function val(id) {
       return document.getElementById(id).value;
     }
+    function currentMessage(key) {
+      return currentMessages[key] || key;
+    }
     function splitIds(id) {
       return val(id).split(",").map((item) => item.trim()).filter(Boolean);
+    }
+    function selectedValues(id) {
+      return Array.from(document.getElementById(id).selectedOptions).map((option) => option.value);
+    }
+    function populateProposalOptions(proposals) {
+      const select = document.getElementById("review-proposal-select");
+      select.replaceChildren();
+      proposals.forEach((proposal) => {
+        const option = document.createElement("option");
+        option.value = proposal.proposal_id;
+        option.textContent = `${proposal.status} · ${proposal.proposed_nodes.length} nodes · ${proposal.proposal_id}`;
+        select.appendChild(option);
+      });
+      selectProposal();
+    }
+    function selectProposal() {
+      const proposalId = val("review-proposal-select");
+      const proposal = cachedProposals.find((item) => item.proposal_id === proposalId);
+      const select = document.getElementById("review-temp-select");
+      select.replaceChildren();
+      if (!proposal) {
+        return;
+      }
+      proposal.proposed_nodes.forEach((node) => {
+        const option = document.createElement("option");
+        option.value = node.temporary_id;
+        option.textContent = `${node.node_type} · ${node.title}`;
+        option.selected = true;
+        select.appendChild(option);
+      });
+    }
+    function populateStagingOptions(entries) {
+      const select = document.getElementById("review-entry-select");
+      select.replaceChildren();
+      entries.forEach((entry) => {
+        const option = document.createElement("option");
+        option.value = entry.entry_id;
+        option.textContent = `${entry.status} · ${entry.proposed_node.title}`;
+        option.selected = true;
+        select.appendChild(option);
+      });
     }
   </script>
 </body>

@@ -1,0 +1,55 @@
+site_name: Rhine-Vault
+site_description: Local-first knowledge capture, approval and retrieval infrastructure.
+repo_name: Rhine-Vault
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: mkdocs
+  language: zh
+
+exclude_docs: |
+  local/
+  local/**
+  discussion/
+  discussion/**
+  templates/
+  templates/**
+  implementation/CHANGELOG_PENDING.md
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Start Here: architecture/00_START_HERE.md
+      - Architecture Contract: architecture/ARCHITECTURE_CONTRACT.md
+      - Decision Log: architecture/DECISION_LOG.md
+      - V1 Scope: architecture/V1_SCOPE.md
+      - Scope Matrix: architecture/SCOPE_MATRIX.md
+      - Domain Model: architecture/DOMAIN_MODEL.md
+      - Knowledge Capture: architecture/KNOWLEDGE_CAPTURE.md
+      - Actor Permission Model: architecture/ACTOR_PERMISSION_MODEL.md
+      - API and MCP Contract: architecture/API_MCP_CONTRACT.md
+      - Storage and Indexing: architecture/STORAGE_AND_INDEXING.md
+      - Schema and Migration: architecture/SCHEMA_AND_MIGRATION.md
+      - Chunking Spec: architecture/CHUNKING_SPEC.md
+      - Retrieval Profiles: architecture/RETRIEVAL_PROFILES.md
+      - Ranking and Reranking: architecture/RANKING_AND_RERANKING.md
+      - Context Bundle: architecture/CONTEXT_BUNDLE.md
+      - Relation Consistency: architecture/RELATION_CONSISTENCY.md
+      - Versioning and Git: architecture/VERSIONING_AND_GIT.md
+      - External Change Workflow: architecture/EXTERNAL_CHANGE_WORKFLOW.md
+      - Cross Workspace and Libraries: architecture/CROSS_WORKSPACE_AND_LIBRARIES.md
+      - Library Versioning: architecture/LIBRARY_VERSIONING.md
+      - Obsidian Integration: architecture/OBSIDIAN_INTEGRATION.md
+      - Backup and Recovery: architecture/BACKUP_AND_RECOVERY.md
+      - Security and Guardrails: architecture/SECURITY_AND_GUARDRAILS.md
+      - Implementation Risks: architecture/IMPLEMENTATION_RISKS.md
+      - Acceptance Criteria: architecture/ACCEPTANCE_CRITERIA.md
+  - Implementation:
+      - Current Phase: implementation/CURRENT_PHASE.md
+      - Roadmap: implementation/ROADMAP.md
+      - Phase 0-1 Checklist: implementation/PHASE_0_1_CHECKLIST.md
+      - Phase 1.5 Vertical Slice: implementation/PHASE_1_5_VERTICAL_SLICE.md
+      - Consistency Check: implementation/CONSISTENCY_CHECK.md
+      - Project Style Standard: implementation/PROJECT_STYLE_STANDARD_TEMPLATE.md
+      - Style Adoption: implementation/STYLE_ADOPTION.md

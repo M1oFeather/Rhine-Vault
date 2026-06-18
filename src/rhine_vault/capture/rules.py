@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -243,10 +244,20 @@ def extract_project_nodes(
 
 
 def stable_node_id(workspace_id: str, title: str) -> str:
-    slug = _slug(title)
+    cleaned = title.strip()
+    if not cleaned:
+        raise ValueError("title cannot be empty")
+    slug = _slug(cleaned) or "node"
+    if _needs_hash_suffix(cleaned):
+        digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:10]
+        slug = f"{slug}-{digest}"
     return validate_node_id(f"{workspace_id}.{slug}")
 
 
 def _slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return slug or "untitled"
+    return slug
+
+
+def _needs_hash_suffix(value: str) -> bool:
+    return re.search(r"[^A-Za-z0-9 _-]", value) is not None

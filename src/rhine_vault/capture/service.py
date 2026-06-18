@@ -33,19 +33,21 @@ class CaptureService:
         relations: tuple[dict[str, Any], ...] = (),
     ) -> dict[str, Any]:
         validate_workspace_id(workspace_id)
+        clean_title = _require_non_blank(title, "title")
+        clean_node_type = _require_non_blank(node_type, "node_type")
         source = self.store.add_source(
             workspace_id=workspace_id,
             source_type="manual",
             origin="manual-editor",
             body=content,
-            metadata={"title": title, "node_type": node_type},
+            metadata={"title": clean_title, "node_type": clean_node_type},
         )
         node = _node_from_draft(
             workspace_id,
             ProposedNodeDraft(
-                temporary_id=f"proposal.manual.{stable_node_id(workspace_id, title)}",
-                title=title,
-                node_type=node_type,
+                temporary_id=f"proposal.manual.{stable_node_id(workspace_id, clean_title)}",
+                title=clean_title,
+                node_type=clean_node_type,
                 content=content,
                 tags=tags,
                 authority=authority,
@@ -181,6 +183,13 @@ def _node_from_draft(workspace_id: str, draft: ProposedNodeDraft) -> dict[str, A
         "rationale": draft.rationale,
         "confidence": draft.confidence,
     }
+
+
+def _require_non_blank(value: str, field_name: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty")
+    return cleaned
 
 
 def _select_project_files(root: Path, include_paths: tuple[str, ...]) -> list[Path]:

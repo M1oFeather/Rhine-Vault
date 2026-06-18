@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from rhine_vault.api import create_app
+from rhine_vault.capture.rules import stable_node_id
 from rhine_vault.capture.service import CaptureService
 from rhine_vault.context import build_context_bundle
 from rhine_vault.llm import FakeLLMProvider
@@ -160,12 +161,59 @@ def test_project_scan_keeps_source_index_separate(tmp_path: Path) -> None:
     assert store.search(workspace_id="demo-workspace", query="workspace staging")
 
 
+def test_manual_titles_are_required_and_non_ascii_ids_are_stable(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path / "api.db"))
+    empty = client.post(
+        "/api/manual",
+        json={
+            "workspace_id": "demo-workspace",
+            "title": "   ",
+            "node_type": "Constraint",
+            "content": "No title should not create an untitled node.",
+        },
+    )
+
+    assert empty.status_code == 422
+
+    node_id = stable_node_id("demo-workspace", "审批规则")
+    assert node_id.startswith("demo-workspace.node-")
+    assert node_id == stable_node_id("demo-workspace", "审批规则")
+    assert not node_id.endswith("untitled")
+
+
 def test_fastapi_endpoints_and_ui(tmp_path: Path) -> None:
     client = TestClient(create_app(tmp_path / "api.db"))
 
     ui = client.get("/")
     assert ui.status_code == 200
-    assert "Manual Node Editor" in ui.text
+    assert 'lang="zh-CN"' in ui.text
+    assert "手动节点编辑" in ui.text
+    assert 'data-i18n="manual.title"' in ui.text
+    assert 'id="manual-type"' in ui.text
+    assert "/api/node-types" in ui.text
+    assert 'id="conversation-session"' in ui.text
+    assert 'id="conversation-role"' in ui.text
+    assert 'id="conversation-message"' in ui.text
+    assert 'id="conversation-messages"' in ui.text
+    assert "conversationMessages" in ui.text
+    assert 'id="review-proposal-select"' in ui.text
+    assert 'id="review-temp-select" multiple' in ui.text
+    assert 'id="review-entry-select" multiple' in ui.text
+
+    zh_catalog = client.get("/api/i18n").json()
+    en_catalog = client.get("/api/i18n?locale=en-US").json()
+    fallback_catalog = client.get("/api/i18n?locale=fr").json()
+    assert zh_catalog["locale"] == "zh"
+    assert zh_catalog["messages"]["manual.title"] == "手动节点编辑"
+    assert en_catalog["locale"] == "en"
+    assert en_catalog["messages"]["manual.title"] == "Manual Node Editor"
+    assert fallback_catalog["locale"] == "zh"
+    zh_node_types = client.get("/api/node-types").json()
+    en_node_types = client.get("/api/node-types?locale=en").json()
+    assert zh_node_types["extension_policy"]["mode"] == "approval_required"
+    assert zh_node_types["node_types"][1]["id"] == "Constraint"
+    assert zh_node_types["node_types"][1]["display_name"]
+    assert en_node_types["node_types"][1]["display_name"] == "Constraint"
 
     proposal = client.post(
         "/api/manual",
@@ -185,6 +233,9 @@ def test_fastapi_endpoints_and_ui(tmp_path: Path) -> None:
             "temporary_ids": [proposal["proposed_nodes"][0]["temporary_id"]],
         },
     ).json()
+    staging = client.get("/api/staging?workspace_id=demo-workspace").json()
+    assert staging[0]["entry_id"] == staged[0]["entry_id"]
+    assert staging[0]["proposed_node"]["title"] == "Manual constraint"
     client.post(
         "/api/staging/approve",
         json={

@@ -1,0 +1,21 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+charset = utf-8-bom
+
+[*.html]
+charset = utf-8-bom
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,toml,json}]
+indent_style = space
+indent_size = 2

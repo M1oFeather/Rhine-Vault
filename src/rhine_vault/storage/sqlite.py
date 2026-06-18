@@ -280,6 +280,21 @@ class SQLiteStore:
             )
         return entries
 
+    def list_staging(
+        self, workspace_id: str, status: str | None = "pending"
+    ) -> list[dict[str, Any]]:
+        validate_workspace_id(workspace_id)
+        where = "WHERE workspace_id = ?"
+        parameters: tuple[str, ...] = (workspace_id,)
+        if status is not None:
+            where += " AND status = ?"
+            parameters = (workspace_id, status)
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM staging_entries {where} ORDER BY created_at", parameters
+            ).fetchall()
+        return [_staging_from_row(row) for row in rows]
+
     def approve_staging(
         self, *, workspace_id: str, entry_ids: tuple[str, ...]
     ) -> list[dict[str, Any]]:
@@ -443,6 +458,17 @@ def _proposal_from_row(row: sqlite3.Row) -> dict[str, Any]:
         "proposed_relations": json.loads(row["proposed_relations_json"]),
         "rationale": row["rationale"],
         "confidence": row["confidence"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+    }
+
+
+def _staging_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "entry_id": row["entry_id"],
+        "workspace_id": row["workspace_id"],
+        "proposal_id": row["proposal_id"],
+        "proposed_node": json.loads(row["proposed_node_json"]),
         "status": row["status"],
         "created_at": row["created_at"],
     }
