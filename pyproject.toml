@@ -5,32 +5,47 @@ build-backend = "hatchling.build"
 [project]
 name = "rhine-vault"
 version = "0.1.0"
-description = "Local-first knowledge vault primitives for Rhine-Vault Phase 0-1."
+description = "Local-first knowledge vault core with optional API and UI clients."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi>=0.125,<1",
   "pydantic>=2.12,<3",
-  "uvicorn>=0.38,<1",
 ]
 
 [project.scripts]
 rhine-vault = "rhine_vault.core:main"
+rhine-vault-mcp = "rhine_vault.mcp_server:main"
 
 [project.optional-dependencies]
+api = [
+  "fastapi>=0.125,<1",
+  "uvicorn>=0.38,<1",
+]
+webui = [
+  "fastapi>=0.125,<1",
+  "uvicorn>=0.38,<1",
+]
+desktop = [
+  "fastapi>=0.125,<1",
+  "uvicorn>=0.38,<1",
+]
+mcp = [
+  "mcp>=1.27,<2",
+]
 dev = [
+  "fastapi>=0.125,<1",
   "httpx>=0.28",
   "mkdocs>=1.6",
   "mypy>=1.18",
   "pre-commit>=4.0",
   "pytest>=8.0",
   "ruff>=0.14",
+  "uvicorn>=0.38,<1",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rhine_vault"]
 artifacts = [
-  "src/rhine_vault/api/static/index.html",
   "src/rhine_vault/config/node_types.json",
 ]
 

@@ -6,10 +6,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square" alt="Python 3.12+">
-  <img src="https://img.shields.io/badge/FastAPI-Phase%201.5-009688?style=flat-square" alt="FastAPI">
+  <img src="https://img.shields.io/badge/FastAPI-optional-009688?style=flat-square" alt="FastAPI">
   <img src="https://img.shields.io/badge/SQLite-FTS5-003B57?style=flat-square" alt="SQLite FTS5">
   <img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=flat-square" alt="Pydantic v2">
-  <img src="https://img.shields.io/badge/Status-Knowledge%20Capture%20Slice-purple?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-Phase%204%20MCP-purple?style=flat-square" alt="Status">
 </p>
 
 ---
@@ -18,9 +18,9 @@
 
 **Rhine-Vault** 是一个本地优先、数据主权优先的无头知识图谱与检索引擎。它把对话、文档和项目文件先转化为可审阅的候选知识，再通过人工批准进入正式知识库，最后用于搜索、Context Bundle 组装和 LLM 回答引用。
 
-当前版本处于 **Phase 1.5 — Knowledge Capture Vertical Slice**：重点不是完整产品化，而是尽早验证从知识录入到可引用回答的最小闭环。
+当前版本已推进至 **Phase 4 — Formal UI and MCP**：在正式审批、可解释检索和 Context Bundle 基础上，补齐受限 MCP 能力边界、候选写入工具、资源读取和 HTTP 管理入口。
 
-> Phase 1.5 不实现正式 Git 发布事务、MCP、ChromaDB、Library、PDF/DOCX/OCR 或实时项目同步。
+> Phase 4 不实现 ChromaDB / 生产向量索引、Library 发布、PDF/DOCX/OCR、生产级图谱 UI、完整 Obsidian 插件或云端同步。
 
 ---
 
@@ -30,8 +30,9 @@
 |---|---|
 | **Python 3.12+** | 项目运行环境 |
 | **FastAPI** | 极简后端与 API |
-| **SQLite / FTS5** | Phase 1.5 存储与全文检索 |
+| **SQLite / FTS5** | 工作流存储与全文检索 |
 | **Pydantic v2** | 领域模型与输入校验 |
+| **MCP SDK** | 可选 MCP stdio / Streamable HTTP adapter |
 | **pytest / ruff / mypy** | 测试、lint 与类型检查 |
 | **MkDocs** | 项目文档站点 |
 
@@ -57,9 +58,12 @@
 
 - **基础 FTS5 检索** — 已批准 MemoryNode 可被全文搜索
 - **Context Bundle v0** — 输出 Mandatory Constraints、Relevant Context、Supporting References、Warnings
+- **Formal Retrieval** — Retrieval Profile、Weighted RRF、规则重排、关系扩展与 explain trace
+- **MCP 边界** — Agent 可读正式知识并提交/修订候选，但不能批准或直接写正式节点
 - **来源引用** — LLM 回答保留 node citation 与 source reference
 - **FakeLLMProvider** — 自动测试不依赖真实 LLM
 - **界面 i18n** — 默认中文，支持中文 / English 切换
+- **类 VS Code 侧栏** — 采集、节点、审核、检索按活动栏组织
 
 ### Markdown Foundation
 
@@ -76,10 +80,13 @@ main.py                           # 根目录薄启动入口
 
 src/rhine_vault/
 │
-├── api/                         # FastAPI 后端与极简 Web UI
-│   ├── app.py                   # API 路由、应用工厂、UI 入口
+├── core/                        # core-only 入口与运行时边界
+│   └── runtime.py               # API server lazy import，core 安装安全
+│
+├── api/                         # 可选 FastAPI REST/UI adapter
+│   ├── app.py                   # API 路由、应用工厂、UI 路由与 docs 入口
 │   └── static/
-│       └── index.html           # Phase 1.5 单页 UI
+│       └── index.html           # 内置 WebUI 管理面板
 │
 ├── capture/                     # Knowledge Capture 编排
 │   ├── service.py               # 手动、对话、文档、项目扫描入口
@@ -105,12 +112,25 @@ src/rhine_vault/
 ├── config/
 │   └── node_types.json          # 节点类型与多语言显示名配置
 │
-├── context.py                   # Context Bundle v0
-├── core.py                      # 应用启动编排
+├── retrieval.py                 # Phase 3 正式检索链路
+├── mcp_bridge.py                # Phase 4 MCP 受限能力桥
+├── mcp_server.py                # 可选 FastMCP adapter
+├── context.py                   # Context Bundle
 ├── i18n.py                      # UI 中文/英文翻译词表
 ├── logger.py                    # 日志初始化
 ├── node_types.py                # 节点类型配置加载与本地化
 └── llm.py                       # FakeLLM 与 OpenAI-compatible Provider
+
+ui/
+├── package.json                 # Vite + Vue + Element Plus 客户端
+├── vite.config.ts
+└── src/
+    ├── assets/icons/            # 面板图标资源
+    ├── components/              # Vue 共享组件
+    ├── icons/                   # 图标注册表
+    ├── App.vue
+    ├── api.ts
+    └── main.ts
 ```
 
 ---
@@ -123,6 +143,44 @@ src/rhine_vault/
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
+
+### 仅安装 Core
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e .
+```
+
+默认安装只包含核心领域模型、Markdown、SQLite、正式工作流和检索能力，不强制安装 FastAPI、uvicorn 或前端工具链。
+
+### 安装 API Server
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[api]"
+```
+
+### 安装 MCP Adapter
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[mcp]"
+```
+
+MCP SDK 是可选依赖。未安装时，core 与 API server 仍可正常工作，`/api/mcp/capabilities` 仍可查看同一套受限能力边界。
+
+### 安装 WebUI 层
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[webui]"
+```
+
+WebUI 层包含 API server 依赖，并保留 `/webui` 作为可扩展远程管理面板入口。世界观生成器、小说编写管理、Bot/机器人控制面板等适合优先放在这一层，避免污染 core。
+
+### 安装 Desktop 层
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[desktop]"
+```
+
+Desktop 层面向完整本地工作台，后续可承载更多本地文件、顶部菜单、帮助文档、本地编辑器和 Element Plus 独有能力。
 
 ### 启动后端与 UI
 
@@ -141,6 +199,42 @@ python -m venv .venv
 ```text
 http://127.0.0.1:8765/
 ```
+
+### 启动 MCP stdio
+
+```powershell
+.\.venv\Scripts\rhine-vault-mcp.exe
+```
+
+可通过 `RHINE_VAULT_DB` 指定 SQLite 数据库路径。Streamable HTTP MCP 需要先安装 `rhine-vault[mcp]`，并显式启用：
+
+```powershell
+$env:RHINE_VAULT_ENABLE_MCP_HTTP="1"
+.\.venv\Scripts\python.exe main.py
+```
+
+挂载路径为 `/mcp`。普通管理端点始终是 `/api/mcp/*`。
+
+### 启动 Element Plus UI
+
+```powershell
+cd ui
+npm install
+npm run dev
+```
+
+开发时 Vite 会把 `/api` 代理到 `http://127.0.0.1:8765`。
+
+构建后端托管产物：
+
+```powershell
+cd ui
+npm run build
+```
+
+FastAPI 会优先托管 `ui/dist/index.html`；也可通过 `RHINE_VAULT_UI_DIST` 指定外部构建目录。内置 WebUI 始终可通过 `/webui` 打开，用于轻量远程管理；Element 构建产物可通过 `/element` 打开。未构建 Element UI 时，`/` 会回落到 WebUI；设置 `RHINE_VAULT_API_DOCS_ONLY=1` 时，`/` 只显示 FastAPI 自带 `/docs`、`/redoc` 和 `/openapi.json` 入口。
+
+UI 迁移原则：WebUI 与 Element UI 可以都使用 Vue，但必须先保证 WebUI 功能等价，再做视觉升级。面板图标采用 `M1oFeather/Game-Icon-Pack` 精选 SVG 子集，通过 `GameIcon.vue` 引用。
 
 ### 最小流程
 
@@ -213,22 +307,30 @@ FakeLLM Answer with Sources
 | `POST /api/staging/approve` | 人工批准 staging |
 | `POST /api/search` | FTS 搜索已批准节点 |
 | `POST /api/context` | 构建 Context Bundle v0 |
+| `POST /api/integrations/bot/context` | 为 Bot/Ptilopsis 适配器生成轻量 Context payload |
+| `POST /api/documents/generate` | 基于已批准知识生成可检查 Markdown 文档 |
+| `GET /api/mcp/capabilities` | 查看 Phase 4 MCP 白名单、资源和禁止能力 |
+| `POST /api/mcp/tools/{tool_name}` | 通过 HTTP 调用同一套受限 MCP bridge |
+| `GET /api/mcp/resources` | 读取受限 `rhine://` MCP resources |
 | `POST /api/llm/fake` | FakeLLM 回答 |
 | `POST /api/llm/openai-compatible` | 可选真实 Provider |
 | `GET /api/i18n` | 获取 UI 翻译词表 |
 | `GET /api/node-types` | 获取节点类型配置和多语言显示名 |
+| `GET /api/nodes` | 获取已批准节点目录 |
 
 ---
 
 ## 技术亮点
 
-- **本地优先** — Phase 1.5 默认可在无真实 LLM、无向量库、无云服务下完整测试
+- **本地优先** — 默认 core-only，可在无真实 LLM、无向量库、无云服务下完整测试
 - **审批边界清晰** — Source、Proposal、Staging、MemoryNode 分层保存
 - **检索不污染** — 未批准 proposal 不进入正式 FTS
+- **受限 MCP** — MCP 只能读正式知识和写候选区，不能批准、删除、raw SQL 或任意读文件
 - **可追溯来源** — 对话 message range、文档 heading / line range、项目文件 path 均可保留
 - **确定性基础设施** — Markdown round-trip 与 chunking 不依赖 LLM
 - **可替换 LLM** — FakeLLM 用于测试，OpenAI-compatible Provider 只在显式配置后启用
 - **轻量 i18n** — 翻译词表由后端提供，UI 默认中文并支持英文切换
+- **节点目录** — UI 可浏览已批准节点，生产图谱连线面板留待后续阶段
 
 ---
 
@@ -241,6 +343,9 @@ FakeLLM Answer with Sources
 | `docs/architecture/KNOWLEDGE_CAPTURE.md` | Knowledge Capture 边界 |
 | `docs/implementation/CURRENT_PHASE.md` | 当前阶段 |
 | `docs/implementation/PHASE_1_5_VERTICAL_SLICE.md` | Phase 1.5 规格 |
+| `docs/implementation/PHASE_2_FORMAL_WORKFLOW.md` | Phase 2 规格 |
+| `docs/implementation/PHASE_3_FORMAL_RETRIEVAL.md` | Phase 3 规格 |
+| `docs/implementation/PHASE_4_FORMAL_UI_MCP.md` | Phase 4 规格 |
 | `docs/implementation/PROJECT_STYLE_STANDARD_TEMPLATE.md` | 个人项目统一风格模板 |
 | `mkdocs.yml` | MkDocs 文档站点配置 |
 
@@ -261,7 +366,7 @@ FakeLLM Answer with Sources
   </tr>
   <tr>
     <td align="center"><b>阶段</b></td>
-    <td>Phase 1.5 — Knowledge Capture Vertical Slice</td>
+    <td>Phase 4 — Formal UI and MCP</td>
   </tr>
   <tr>
     <td align="center"><b>定位</b></td>
@@ -276,5 +381,5 @@ FakeLLM Answer with Sources
 ---
 
 <p align="center">
-  <sub>Rhine-Vault 仍处于早期垂直切片阶段；正式工作流、Git 事务、MCP、Library 与向量索引将在后续阶段推进。</sub>
+  <sub>Rhine-Vault 已进入受限 MCP 与正式 UI 阶段；Library、生产向量索引与生产级图谱 UI 将在后续阶段推进。</sub>
 </p>

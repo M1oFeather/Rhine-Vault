@@ -97,6 +97,28 @@ class CaptureService:
             confidence=0.86,
         )
 
+    def create_chat_session_proposal(self, *, workspace_id: str, session_id: str) -> dict[str, Any]:
+        validate_workspace_id(workspace_id)
+        stored_messages = self.store.list_conversation_messages(
+            workspace_id=workspace_id,
+            session_id=session_id,
+        )
+        if not stored_messages:
+            raise ValueError("conversation session has no messages")
+        messages = [
+            {
+                "message_id": message["message_id"],
+                "role": message["role"],
+                "content": message["content"],
+            }
+            for message in stored_messages
+        ]
+        return self.create_conversation_proposal(
+            workspace_id=workspace_id,
+            session_id=session_id,
+            messages=messages,
+        )
+
     def create_document_proposal(self, *, workspace_id: str, path: Path) -> dict[str, Any]:
         validate_workspace_id(workspace_id)
         if path.suffix.lower() not in {".md", ".txt"}:

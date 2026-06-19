@@ -54,6 +54,8 @@
 - `delete_formal_node`
 - `execute_raw_sql`
 - `read_arbitrary_file`
+- `publish_library`
+- `git_commit`
 
 ## MCP Resources
 

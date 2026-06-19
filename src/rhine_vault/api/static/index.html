@@ -108,7 +108,7 @@
 </head>
 <body>
   <header>
-    <strong data-i18n="app.title">Rhine-Vault Phase 1.5</strong>
+    <strong data-i18n="app.title">Rhine-Vault Phase 4</strong>
     <label class="locale-control">
       <span data-i18n="language.label">语言</span>
       <select id="locale-select" onchange="applyLocale(this.value)">
@@ -125,8 +125,10 @@
       <button onclick="show('project')" data-i18n="nav.project">项目导入</button>
       <button onclick="show('review')" data-i18n="nav.review">候选知识审核</button>
       <button onclick="show('search')" data-i18n="nav.search">搜索实验台</button>
+      <button onclick="show('retrieval')" data-i18n="activity.retrieve">检索实验台</button>
       <button onclick="show('context')" data-i18n="nav.context">Context Bundle</button>
       <button onclick="show('llm')" data-i18n="nav.llm">LLM 调试台</button>
+      <button onclick="show('mcp'); loadMcpCapabilities()" data-i18n="nav.mcp">MCP 能力</button>
     </nav>
     <div>
       <section id="manual" class="active">
@@ -186,6 +188,46 @@
         <input id="search-query" data-i18n-placeholder="search.query.placeholder" placeholder="查询">
         <button class="action" onclick="search()" data-i18n="search.submit">搜索</button>
       </section>
+      <section id="retrieval">
+        <h2 data-i18n="search.title">Retrieval Lab</h2>
+        <label class="field-label" for="retrieval-query" data-i18n="search.query.placeholder">查询</label>
+        <input id="retrieval-query" placeholder="查询">
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="retrieval.profile.label">检索 Profile</span>
+            <select id="retrieval-profile-select"></select>
+          </label>
+          <label>
+            <span class="field-label" data-i18n="retrieval.limit.label">结果数</span>
+            <input id="retrieval-result-limit" type="number" min="1" max="30" value="8">
+          </label>
+        </div>
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="retrieval.depth.label">关系深度</span>
+            <input id="retrieval-relation-depth" type="number" min="0" max="1" value="1">
+          </label>
+          <label>
+            <span class="field-label" data-i18n="retrieval.tags.label">标签过滤</span>
+            <input id="retrieval-tags" data-i18n-placeholder="retrieval.tags.placeholder" placeholder="逗号分隔">
+          </label>
+        </div>
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="retrieval.node_type.label">节点类型过滤</span>
+            <input id="retrieval-node-type" placeholder="Constraint / Note">
+          </label>
+          <label>
+            <span class="field-label" data-i18n="retrieval.authority.label">Authority 过滤</span>
+            <input id="retrieval-authority" placeholder="canonical / approved">
+          </label>
+        </div>
+        <label class="field-label">
+          <input id="retrieval-include-deprecated" type="checkbox">
+          <span data-i18n="retrieval.include_deprecated">包含 deprecated 节点</span>
+        </label>
+        <button class="action" onclick="retrievalLab()" data-i18n="retrieval.run">运行 Retrieval Lab</button>
+      </section>
       <section id="context">
         <h2 data-i18n="context.title">Context Bundle 查看器</h2>
         <input id="context-query" data-i18n-placeholder="context.query.placeholder" placeholder="问题">
@@ -195,6 +237,19 @@
         <h2 data-i18n="llm.title">LLM 调试台</h2>
         <input id="llm-query" data-i18n-placeholder="llm.query.placeholder" placeholder="问题">
         <button class="action" onclick="fakeLLM()" data-i18n="llm.ask">询问 FakeLLM</button>
+      </section>
+      <section id="mcp">
+        <h2 data-i18n="mcp.title">MCP 能力边界</h2>
+        <button class="action" onclick="loadMcpCapabilities()" data-i18n="mcp.load">加载 MCP 能力</button>
+        <label class="field-label" for="mcp-tool-select" data-i18n="mcp.tool.label">白名单工具</label>
+        <select id="mcp-tool-select"></select>
+        <label class="field-label" for="mcp-arguments" data-i18n="mcp.arguments.label">JSON 参数</label>
+        <textarea id="mcp-arguments">{"workspace_id":"demo-workspace","query":"approval"}</textarea>
+        <button class="action" onclick="callMcpTool()" data-i18n="mcp.call">调用工具</button>
+        <label class="field-label" for="mcp-resource-uri" data-i18n="mcp.resource.label">Resource URI</label>
+        <input id="mcp-resource-uri" value="rhine://workspace/demo-workspace/schema/memory-node">
+        <button class="action" onclick="readMcpResource()" data-i18n="mcp.resource.read">读取 Resource</button>
+        <pre id="mcp-summary">MCP capabilities will appear here.</pre>
       </section>
       <pre id="output" data-i18n="output.placeholder">结果会显示在这里。</pre>
     </div>
@@ -206,6 +261,7 @@
     let cachedProposals = [];
     let currentMessages = {};
     let conversationMessages = [];
+    let cachedMcpCapabilities = null;
 
     document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll("[data-i18n-default]").forEach((element) => {
@@ -255,6 +311,7 @@
       seedConversationMessages();
       renderConversationMessages();
       loadNodeTypes(catalog.locale);
+      loadRetrievalProfiles();
     }
 
     async function loadNodeTypes(locale) {
@@ -405,11 +462,74 @@
     function search() {
       post("/api/search", {workspace_id, query: val("search-query")});
     }
+    async function loadRetrievalProfiles() {
+      const select = document.getElementById("retrieval-profile-select");
+      if (!select) {
+        return;
+      }
+      const response = await fetch(`/api/retrieval/profiles?workspace_id=${workspace_id}`);
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      const selectedValue = select.value || payload.default_profile_id;
+      select.replaceChildren();
+      payload.profiles.forEach((profile) => {
+        const option = document.createElement("option");
+        option.value = profile.profile_id;
+        option.textContent = profile.name;
+        select.appendChild(option);
+      });
+      select.value = selectedValue;
+    }
+    function retrievalLab() {
+      post("/api/retrieval/lab", {
+        workspace_id,
+        query: val("retrieval-query"),
+        profile_id: val("retrieval-profile-select"),
+        result_limit: Number(val("retrieval-result-limit") || 8),
+        relation_depth: Number(val("retrieval-relation-depth") || 0),
+        node_type: val("retrieval-node-type") || null,
+        authority: val("retrieval-authority") || null,
+        tags: splitIds("retrieval-tags"),
+        include_deprecated: document.getElementById("retrieval-include-deprecated").checked
+      });
+    }
     function contextBundle() {
       post("/api/context", {workspace_id, query: val("context-query")});
     }
     function fakeLLM() {
       post("/api/llm/fake", {workspace_id, query: val("llm-query")});
+    }
+    async function loadMcpCapabilities() {
+      const res = await fetch("/api/mcp/capabilities");
+      const payload = await res.json();
+      cachedMcpCapabilities = payload;
+      populateMcpTools(payload.tools || []);
+      document.getElementById("mcp-summary").textContent = JSON.stringify({
+        phase: payload.phase,
+        streamable_http: payload.streamable_http,
+        tools: (payload.tools || []).map((tool) => `${tool.name} (${tool.write_scope})`),
+        forbidden_tools: payload.forbidden_tools,
+        resources: payload.resources,
+        approval_policy: payload.approval_policy
+      }, null, 2);
+      out(payload);
+    }
+    async function callMcpTool() {
+      let parsed = {};
+      try {
+        parsed = JSON.parse(val("mcp-arguments") || "{}");
+      } catch (error) {
+        out({error: String(error)});
+        return;
+      }
+      await post(`/api/mcp/tools/${val("mcp-tool-select")}`, {arguments: parsed});
+    }
+    async function readMcpResource() {
+      const uri = encodeURIComponent(val("mcp-resource-uri"));
+      const res = await fetch(`/api/mcp/resources?uri=${uri}`);
+      out(await res.json());
     }
     function val(id) {
       return document.getElementById(id).value;
@@ -460,6 +580,19 @@
         option.selected = true;
         select.appendChild(option);
       });
+    }
+    function populateMcpTools(tools) {
+      const select = document.getElementById("mcp-tool-select");
+      select.replaceChildren();
+      tools.forEach((tool) => {
+        const option = document.createElement("option");
+        option.value = tool.name;
+        option.textContent = `${tool.name} · ${tool.write_scope}`;
+        select.appendChild(option);
+      });
+      if (!select.value && select.options.length > 0) {
+        select.value = select.options[0].value;
+      }
     }
   </script>
 </body>

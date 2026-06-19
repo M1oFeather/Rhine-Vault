@@ -25,6 +25,7 @@ nav:
       - Decision Log: architecture/DECISION_LOG.md
       - V1 Scope: architecture/V1_SCOPE.md
       - Scope Matrix: architecture/SCOPE_MATRIX.md
+      - Product Layers: architecture/PRODUCT_LAYERS.md
       - Domain Model: architecture/DOMAIN_MODEL.md
       - Knowledge Capture: architecture/KNOWLEDGE_CAPTURE.md
       - Actor Permission Model: architecture/ACTOR_PERMISSION_MODEL.md
@@ -50,6 +51,11 @@ nav:
       - Roadmap: implementation/ROADMAP.md
       - Phase 0-1 Checklist: implementation/PHASE_0_1_CHECKLIST.md
       - Phase 1.5 Vertical Slice: implementation/PHASE_1_5_VERTICAL_SLICE.md
+      - Phase 2 Formal Workflow: implementation/PHASE_2_FORMAL_WORKFLOW.md
+      - Phase 3 Formal Retrieval: implementation/PHASE_3_FORMAL_RETRIEVAL.md
+      - Phase 4 Formal UI and MCP: implementation/PHASE_4_FORMAL_UI_MCP.md
+      - UI Panel Migration: implementation/UI_PANEL_MIGRATION.md
+      - WebUI Plugin Concepts: implementation/WEBUI_PLUGIN_CONCEPTS.md
       - Consistency Check: implementation/CONSISTENCY_CHECK.md
       - Project Style Standard: implementation/PROJECT_STYLE_STANDARD_TEMPLATE.md
       - Style Adoption: implementation/STYLE_ADOPTION.md

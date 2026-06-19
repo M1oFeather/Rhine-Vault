@@ -10,6 +10,8 @@ dist/
 build/
 *.egg-info/
 site/
+ui/node_modules/
+ui/dist/
 
 # Local IDE state
 .idea/

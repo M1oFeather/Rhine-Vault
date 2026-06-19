@@ -282,9 +282,17 @@ class RetrievalProfile(BaseDomainModel):
     workspace_id: str
     name: str = Field(min_length=1)
     exact_weight: float = Field(default=1.0, ge=0)
+    metadata_weight: float = Field(default=1.0, ge=0)
     fts_weight: float = Field(default=1.0, ge=0)
     vector_weight: float = Field(default=0.0, ge=0)
-    relation_depth: int = Field(default=1, ge=0, le=3)
+    rrf_k: int = Field(default=60, ge=1, le=200)
+    relation_depth: int = Field(default=1, ge=0, le=2)
+    result_limit: int = Field(default=8, ge=1, le=50)
+    mandatory_limit: int = Field(default=4, ge=0, le=20)
+    relevant_limit: int = Field(default=6, ge=0, le=30)
+    supporting_limit: int = Field(default=6, ge=0, le=30)
+    conflict_strategy: Literal["warn", "block"] = "warn"
+    include_deprecated: bool = False
     schema_version: int = Field(default=1, ge=1)
 
     @field_validator("workspace_id")

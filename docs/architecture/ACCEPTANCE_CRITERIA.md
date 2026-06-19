@@ -6,6 +6,16 @@
 - 无声明依赖时无法跨库搜索；
 - 非法 workspace_id 和路径穿越被拒绝。
 
+## 安装与客户端边界
+
+- 默认 Python 安装可作为 core-only 库使用；
+- API server 依赖通过可选 extra 安装；
+- UI 客户端位于独立 `ui/` 目录；
+- 后端可托管构建后的 `ui/dist`，但 core 不依赖前端工具链；
+- 后端保留内置 WebUI 管理面板，至少可通过 `/webui` 打开；
+- 未构建 Element UI 时 API server 可回落到 WebUI，并保留 FastAPI 自带 `/docs`、`/redoc` 和 `/openapi.json` 入口。
+- HTTP API 的本地文档导入与项目扫描必须限制在允许导入根目录内。
+
 ## 编辑与审批
 
 - UI 编辑不会直接改正式文件；
@@ -94,3 +104,49 @@
 - FakeLLM 完成端到端测试；
 - 真实 LLM 未配置时不影响系统测试；
 - 回答显示引用节点和来源。
+
+
+# Phase 2 Formal Workflow 验收
+
+- staging 批准前会执行 validation；
+- staging / ExternalChange 可生成结构化 diff；
+- 人工批准会生成 ChangeSet；
+- 节点变更会生成 NodeRevision；
+- base_revision 冲突会被阻止；
+- 批准后的正式知识会同步 Markdown 与 SQLite；
+- 批准后的变更会生成 Git commit；
+- 批准、拒绝、回滚和外部变更处理会生成 AuditEvent；
+- 回滚生成新的 revision，而不是覆盖历史 revision；
+- 外部 Markdown 变更会进入 ExternalChange 审批入口；
+- 正式批准后创建 IndexJob；
+- 未批准内容仍不得进入正式检索。
+
+
+# Phase 3 Formal Retrieval 验收
+
+- Retrieval Profile 提供技术文档、世界观和 AI 知识库默认预设；
+- 单次检索可选择 profile，并且服务端强制关系深度和结果数上限；
+- exact、metadata、SQLite FTS 三个候选通道可用；
+- vector channel 在 Phase 3 不启用，并在 explain trace 中说明原因；
+- Weighted RRF 融合记录每个 channel 的 rank、weight、raw_score 和 contribution；
+- 规则重排覆盖 exact match 与 authority；
+- archived、deprecated、superseded 节点不会静默混入普通上下文；
+- `conflicts_with` 和 `supersedes` 关系会生成 warning；
+- 一跳关系扩展可用，`related_to` 默认不自动扩展；
+- Context Bundle 输出 mandatory_constraints、relevant_context、supporting_references、warnings 和 explain_trace；
+- Retrieval Lab UI 可展示 profile、通道候选、融合排名、过滤结果、关系扩展和最终 Context Bundle；
+- 未批准 staging 和 ExternalChange 内容仍不得进入正式检索。
+
+
+# Phase 4 Formal UI and MCP 验收
+
+- 默认 core-only 安装不依赖 MCP SDK、FastAPI、uvicorn 或前端工具链；
+- MCP SDK 只通过 `rhine-vault[mcp]` 可选启用；
+- `GET /api/mcp/capabilities` 能列出工具白名单、资源模板和 forbidden tools；
+- MCP read tools 只读取已批准 formal MemoryNode、Context Bundle、bounded local graph 或 schema metadata；
+- MCP candidate write tools 只能提交或修订 pending staging candidate；
+- MCP 不提供批准 staging、直接写正式节点、删除节点、raw SQL、任意文件读取、Git commit 或 Library publish；
+- `rhine://workspace/{workspace_id}/node/{node_id}` 只返回正式节点；
+- `rhine://workspace/{workspace_id}/graph/{node_id}?depth=1` 只返回 bounded one-hop graph；
+- 未批准 staging 内容不会进入 `search_nodes` 或 `get_related_context`；
+- SDK 未安装时 API server 仍可启动，并报告 MCP HTTP 挂载不可用原因。
