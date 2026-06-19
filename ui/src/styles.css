@@ -1,0 +1,115 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+  background: #eef1f5;
+  color: #1d232b;
+}
+
+.app-shell {
+  height: 100vh;
+}
+
+.activity-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  background: #233043;
+}
+
+.activity-bar .el-button {
+  margin-left: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #d9dee7;
+  background: #fff;
+}
+
+.topbar-note {
+  color: #667085;
+  font-size: 13px;
+}
+
+.workspace {
+  overflow: auto;
+  background: #eef1f5;
+}
+
+.work-panel {
+  max-width: 1180px;
+  padding: 22px 28px 34px;
+}
+
+.work-panel h2 {
+  margin: 0 0 18px;
+}
+
+.chat-panel {
+  display: grid;
+  grid-template-rows: minmax(260px, 1fr) auto;
+  min-height: calc(100vh - 260px);
+}
+
+.chat-log {
+  min-height: 300px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #fff;
+  padding: 14px;
+}
+
+.chat-bubble {
+  max-width: 78%;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.chat-bubble.user {
+  margin-left: auto;
+  background: #e8f1ff;
+  border-color: #bdd1ef;
+}
+
+.chat-bubble.assistant {
+  margin-right: auto;
+  background: #eef3f8;
+}
+
+.chat-role {
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.composer {
+  margin-top: 12px;
+}
+
+.run-state {
+  height: 220px;
+  min-height: 220px;
+  overflow: auto;
+  border-top: 1px solid #d9dee7;
+  background: #fff;
+  padding: 12px 16px;
+}
+
+.run-state pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
