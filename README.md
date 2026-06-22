@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/FastAPI-optional-009688?style=flat-square" alt="FastAPI">
   <img src="https://img.shields.io/badge/SQLite-FTS5-003B57?style=flat-square" alt="SQLite FTS5">
   <img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=flat-square" alt="Pydantic v2">
-  <img src="https://img.shields.io/badge/Status-Phase%204%20MCP-purple?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-Phase%206%20Vector%20%26%20Recovery-purple?style=flat-square" alt="Status">
 </p>
 
 ---
@@ -18,9 +18,9 @@
 
 **Rhine-Vault** 是一个本地优先、数据主权优先的无头知识图谱与检索引擎。它把对话、文档和项目文件先转化为可审阅的候选知识，再通过人工批准进入正式知识库，最后用于搜索、Context Bundle 组装和 LLM 回答引用。
 
-当前版本已推进至 **Phase 4 — Formal UI and MCP**：在正式审批、可解释检索和 Context Bundle 基础上，补齐受限 MCP 能力边界、候选写入工具、资源读取和 HTTP 管理入口。
+当前版本已推进至 **Phase 6 - Vector, Migration and Recovery**：在正式审批、可解释检索、受限 MCP 与 Library 基础上，补齐 `.rhine` snapshot、import plan、emergency read-only 恢复底座，并加入默认关闭的本地确定性向量适配层。
 
-> Phase 4 不实现 ChromaDB / 生产向量索引、Library 发布、PDF/DOCX/OCR、生产级图谱 UI、完整 Obsidian 插件或云端同步。
+> 当前 Phase 6 切片不实现 ChromaDB / 生产向量索引、Embedding provider 网络调用、破坏性 restore、PDF/DOCX/OCR、生产级图谱 UI、完整 Obsidian 插件或云端同步。
 
 ---
 
@@ -188,6 +188,21 @@ Desktop 层面向完整本地工作台，后续可承载更多本地文件、顶
 .\.venv\Scripts\python.exe main.py
 ```
 
+默认运行数据会写入当前启动目录：
+
+```text
+.rhine/rhine-vault.db
+data/workspaces/<workspace_id>/nodes/*.md
+```
+
+常用环境变量：
+
+```powershell
+$env:RHINE_VAULT_DB="E:\Vaults\Rhine\rhine-vault.db"
+$env:RHINE_VAULT_HOST="127.0.0.1"
+$env:RHINE_VAULT_PORT="8765"
+```
+
 或使用显式 ASGI 入口：
 
 ```powershell
@@ -198,6 +213,7 @@ Desktop 层面向完整本地工作台，后续可承载更多本地文件、顶
 
 ```text
 http://127.0.0.1:8765/
+http://127.0.0.1:8765/api/health
 ```
 
 ### 启动 MCP stdio
@@ -312,6 +328,17 @@ FakeLLM Answer with Sources
 | `GET /api/mcp/capabilities` | 查看 Phase 4 MCP 白名单、资源和禁止能力 |
 | `POST /api/mcp/tools/{tool_name}` | 通过 HTTP 调用同一套受限 MCP bridge |
 | `GET /api/mcp/resources` | 读取受限 `rhine://` MCP resources |
+| `POST /api/index-jobs/process` | 执行 queued/failed 派生索引任务 |
+| `POST /api/index-jobs/rebuild` | 为正式节点创建派生索引重建任务 |
+| `GET /api/index-chunks` | 查看派生 chunk index |
+| `POST /api/libraries/{workspace_id}/snapshots` | 发布 Library snapshot manifest |
+| `GET /api/libraries/{workspace_id}/snapshots` | 查看已发布 Library snapshots |
+| `GET /api/libraries/{workspace_id}/snapshots/{version}` | 读取已发布 snapshot |
+| `POST /api/workspaces/{workspace_id}/dependencies` | 显式锁定 Project -> Library 依赖 |
+| `GET /api/workspaces/{workspace_id}/dependencies/{alias}/upgrade-report` | 生成 Library 依赖升级报告，不自动更新 lock |
+| `POST /api/recovery/snapshots/workspace` | 创建 workspace `.rhine` snapshot |
+| `POST /api/recovery/import-plan` | 只读生成 snapshot import plan |
+| `GET /api/recovery/emergency-readonly` | SQLite 不可用时从 Markdown 读取正式节点 |
 | `POST /api/llm/fake` | FakeLLM 回答 |
 | `POST /api/llm/openai-compatible` | 可选真实 Provider |
 | `GET /api/i18n` | 获取 UI 翻译词表 |
@@ -346,6 +373,8 @@ FakeLLM Answer with Sources
 | `docs/implementation/PHASE_2_FORMAL_WORKFLOW.md` | Phase 2 规格 |
 | `docs/implementation/PHASE_3_FORMAL_RETRIEVAL.md` | Phase 3 规格 |
 | `docs/implementation/PHASE_4_FORMAL_UI_MCP.md` | Phase 4 规格 |
+| `docs/implementation/PHASE_5_INDEXING_AND_LIBRARIES.md` | Phase 5 规格 |
+| `docs/implementation/PHASE_6_VECTOR_MIGRATION_RECOVERY.md` | Phase 6 规格 |
 | `docs/implementation/PROJECT_STYLE_STANDARD_TEMPLATE.md` | 个人项目统一风格模板 |
 | `mkdocs.yml` | MkDocs 文档站点配置 |
 
@@ -366,7 +395,7 @@ FakeLLM Answer with Sources
   </tr>
   <tr>
     <td align="center"><b>阶段</b></td>
-    <td>Phase 4 — Formal UI and MCP</td>
+    <td>Phase 6 — Vector, Migration and Recovery</td>
   </tr>
   <tr>
     <td align="center"><b>定位</b></td>
@@ -381,5 +410,5 @@ FakeLLM Answer with Sources
 ---
 
 <p align="center">
-  <sub>Rhine-Vault 已进入受限 MCP 与正式 UI 阶段；Library、生产向量索引与生产级图谱 UI 将在后续阶段推进。</sub>
+  <sub>Rhine-Vault 已进入恢复、迁移与本地向量适配阶段；生产 ChromaDB 索引与生产级图谱 UI 将在后续阶段推进。</sub>
 </p>

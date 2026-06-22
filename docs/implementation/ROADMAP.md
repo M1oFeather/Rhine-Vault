@@ -130,8 +130,11 @@
 - dynamic capabilities
 - Obsidian optional integration
 
-## Phase 5：Library 与跨工作区
+## Phase 5：Indexing and Libraries
 
+- IndexJob 执行
+- 派生 chunk index
+- 派生索引重建
 - Project/Library
 - published snapshot
 - manifest
@@ -140,9 +143,11 @@
 
 ## Phase 6：向量、迁移与恢复
 
-- EmbeddingProvider
-- Chroma adapter
 - `.rhine`
 - snapshot/import
 - migration center
 - recovery mode
+- local deterministic EmbeddingProvider
+- in-memory vector adapter over index_chunks
+- explicit vector retrieval toggle
+- Chroma adapter evaluation

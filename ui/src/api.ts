@@ -43,6 +43,28 @@ export type McpCapabilities = {
   };
 };
 
+export type LibrarySnapshot = {
+  snapshot_id: string;
+  workspace_id: string;
+  version: string;
+  manifest_hash: string;
+  manifest: Record<string, unknown>;
+  snapshot_path: string;
+  created_at: string;
+};
+
+export type WorkspaceDependency = {
+  project_workspace_id: string;
+  alias: string;
+  library_workspace_id: string;
+  version_requirement: string;
+  resolved_version: string;
+  manifest_hash: string;
+  status: string;
+};
+
+export type ApiRecord = Record<string, any>;
+
 export const workspaceId = "demo-workspace";
 
 export async function getJson<T>(url: string): Promise<T> {
@@ -78,6 +100,7 @@ export function retrievalLab(body: {
   profile_id: string;
   result_limit: number;
   relation_depth: number;
+  enable_vector: boolean;
   node_type?: string;
   authority?: string;
   tags: string[];
@@ -93,6 +116,125 @@ export function buildContextBundle(body: {
   return postJson("/api/context", {workspace_id: workspaceId, ...body});
 }
 
+export function createManualProposal(body: {
+  title: string;
+  node_type: string;
+  content: string;
+  authority: string;
+  tags: string[];
+}): Promise<ApiRecord> {
+  return postJson("/api/manual", {workspace_id: workspaceId, ...body});
+}
+
+export function importDocument(path: string): Promise<ApiRecord> {
+  return postJson("/api/documents/import", {workspace_id: workspaceId, path});
+}
+
+export function scanProject(root: string): Promise<ApiRecord> {
+  return postJson("/api/projects/scan", {workspace_id: workspaceId, root});
+}
+
+export function captureConversation(messages: ChatMessage[]): Promise<ApiRecord> {
+  return postJson("/api/conversations/capture", {
+    workspace_id: workspaceId,
+    session_id: `element-chat-${Date.now()}`,
+    messages: messages.map((message, index) => ({
+      message_id: `message-${Date.now()}-${index + 1}`,
+      role: message.role,
+      content: message.content
+    }))
+  });
+}
+
+export function listProposals(): Promise<ApiRecord[]> {
+  return getJson(`/api/proposals?workspace_id=${workspaceId}`);
+}
+
+export function stageProposal(proposalId: string, temporaryIds: string[]): Promise<ApiRecord[]> {
+  return postJson(`/api/proposals/${proposalId}/stage`, {
+    workspace_id: workspaceId,
+    temporary_ids: temporaryIds
+  });
+}
+
+export function rejectProposal(proposalId: string): Promise<ApiRecord> {
+  return postJson(`/api/proposals/${proposalId}/reject`, {workspace_id: workspaceId});
+}
+
+export function listStaging(status = "pending"): Promise<ApiRecord[]> {
+  return getJson(`/api/staging?workspace_id=${workspaceId}&status=${encodeURIComponent(status)}`);
+}
+
+export function approveStaging(entryIds: string[]): Promise<ApiRecord[]> {
+  return postJson("/api/staging/approve", {
+    workspace_id: workspaceId,
+    entry_ids: entryIds
+  });
+}
+
+export function listNodes(): Promise<ApiRecord[]> {
+  return getJson(`/api/nodes?workspace_id=${workspaceId}`);
+}
+
+export function listNodeRevisions(nodeId: string): Promise<ApiRecord[]> {
+  return getJson(`/api/nodes/${encodeURIComponent(nodeId)}/revisions?workspace_id=${workspaceId}`);
+}
+
+export function rollbackNode(nodeId: string, revision: number): Promise<ApiRecord> {
+  return postJson(`/api/nodes/${encodeURIComponent(nodeId)}/rollback`, {
+    workspace_id: workspaceId,
+    revision
+  });
+}
+
+export function listChangesets(): Promise<ApiRecord[]> {
+  return getJson(`/api/changesets?workspace_id=${workspaceId}`);
+}
+
+export function listAuditEvents(): Promise<ApiRecord[]> {
+  return getJson(`/api/audit-events?workspace_id=${workspaceId}`);
+}
+
+export function detectExternalChanges(): Promise<ApiRecord[]> {
+  return postJson("/api/external-changes/detect", {workspace_id: workspaceId});
+}
+
+export function listExternalChanges(): Promise<ApiRecord[]> {
+  return getJson(`/api/external-changes?workspace_id=${workspaceId}`);
+}
+
+export function approveExternalChange(changeId: string): Promise<ApiRecord> {
+  return postJson(`/api/external-changes/${encodeURIComponent(changeId)}/approve`, {
+    workspace_id: workspaceId
+  });
+}
+
+export function rejectExternalChange(changeId: string): Promise<ApiRecord> {
+  return postJson(`/api/external-changes/${encodeURIComponent(changeId)}/reject`, {
+    workspace_id: workspaceId
+  });
+}
+
+export function createWorkspaceSnapshot(): Promise<ApiRecord> {
+  return postJson("/api/recovery/snapshots/workspace", {workspace_id: workspaceId});
+}
+
+export function buildImportPlan(packagePath: string): Promise<ApiRecord> {
+  return postJson("/api/recovery/import-plan", {package_path: packagePath});
+}
+
+export function emergencyReadonly(): Promise<ApiRecord> {
+  return getJson(`/api/recovery/emergency-readonly?workspace_id=${workspaceId}`);
+}
+
+export function vectorSearch(body: { query: string; result_limit: number }): Promise<ApiRecord> {
+  return postJson("/api/vector/search", {workspace_id: workspaceId, ...body});
+}
+
+export function vectorBackends(): Promise<ApiRecord> {
+  return getJson("/api/vector/backends");
+}
+
 export function mcpCapabilities(): Promise<McpCapabilities> {
   return getJson("/api/mcp/capabilities");
 }
@@ -106,6 +248,65 @@ export function callMcpTool(
 
 export function readMcpResource(uri: string): Promise<Record<string, unknown>> {
   return getJson(`/api/mcp/resources?uri=${encodeURIComponent(uri)}`);
+}
+
+export function processIndexJobs(workspace_id: string): Promise<Record<string, unknown>> {
+  return postJson("/api/index-jobs/process", {workspace_id});
+}
+
+export function rebuildIndexJobs(workspace_id: string): Promise<Record<string, unknown>[]> {
+  return postJson("/api/index-jobs/rebuild", {workspace_id});
+}
+
+export function listIndexChunks(workspace_id: string): Promise<Record<string, unknown>[]> {
+  return getJson(`/api/index-chunks?workspace_id=${encodeURIComponent(workspace_id)}`);
+}
+
+export function publishLibrarySnapshot(body: {
+  workspace_id: string;
+  version: string;
+  git_tag?: string;
+  commit_hash?: string;
+}): Promise<LibrarySnapshot> {
+  return postJson(`/api/libraries/${body.workspace_id}/snapshots`, {
+    version: body.version,
+    git_tag: body.git_tag || undefined,
+    commit_hash: body.commit_hash || undefined
+  });
+}
+
+export function listLibrarySnapshots(workspace_id: string): Promise<LibrarySnapshot[]> {
+  return getJson(`/api/libraries/${encodeURIComponent(workspace_id)}/snapshots`);
+}
+
+export function lockWorkspaceDependency(body: {
+  project_workspace_id: string;
+  alias: string;
+  library_workspace_id: string;
+  version: string;
+  version_requirement?: string;
+}): Promise<WorkspaceDependency> {
+  return postJson(`/api/workspaces/${body.project_workspace_id}/dependencies`, {
+    alias: body.alias,
+    library_workspace_id: body.library_workspace_id,
+    version: body.version,
+    version_requirement: body.version_requirement || undefined
+  });
+}
+
+export function listWorkspaceDependencies(
+  project_workspace_id: string
+): Promise<WorkspaceDependency[]> {
+  return getJson(`/api/workspaces/${encodeURIComponent(project_workspace_id)}/dependencies`);
+}
+
+export function dependencyUpgradeReport(
+  project_workspace_id: string,
+  alias: string
+): Promise<Record<string, unknown>> {
+  return getJson(
+    `/api/workspaces/${encodeURIComponent(project_workspace_id)}/dependencies/${encodeURIComponent(alias)}/upgrade-report`
+  );
 }
 
 export function sendChatMessage(

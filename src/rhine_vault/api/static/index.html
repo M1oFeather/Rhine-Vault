@@ -20,6 +20,29 @@
       border-bottom: 1px solid #d9dee7;
       background: #ffffff;
     }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-pill {
+      max-width: 280px;
+      overflow: hidden;
+      border: 1px solid #c9d7ef;
+      border-radius: 999px;
+      background: #eef4ff;
+      color: #2454a6;
+      padding: 6px 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-pill.busy {
+      border-color: #b9decf;
+      background: #edf9f3;
+      color: #11734d;
+    }
     main {
       display: grid;
       grid-template-columns: 280px 1fr;
@@ -29,6 +52,11 @@
       padding: 16px;
       border-right: 1px solid #d9dee7;
       background: #ffffff;
+    }
+    nav button.active {
+      border-color: #233043;
+      background: #233043;
+      color: #ffffff;
     }
     button {
       width: 100%;
@@ -41,6 +69,7 @@
       cursor: pointer;
     }
     button:hover { background: #eef3f8; }
+    nav button.active:hover { background: #233043; }
     section { padding: 18px 22px; display: none; }
     section.active { display: block; }
     textarea, input, select {
@@ -69,6 +98,33 @@
       display: grid;
       gap: 8px;
       margin: 8px 0 12px;
+    }
+    .panel-card {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid #d9dee7;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .summary-tile {
+      border: 1px solid #d9dee7;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+    }
+    .summary-tile strong {
+      display: block;
+      font-size: 18px;
+    }
+    .summary-tile span {
+      color: #4b5665;
+      font-size: 12px;
     }
     .message-item {
       border: 1px solid #d9dee7;
@@ -100,6 +156,42 @@
       gap: 8px;
       white-space: nowrap;
     }
+    .output-panel {
+      position: sticky;
+      bottom: 0;
+      margin: 18px 22px 0;
+      border: 1px solid #d9dee7;
+      border-radius: 8px 8px 0 0;
+      background: #ffffff;
+      box-shadow: 0 -8px 20px rgba(20, 26, 34, 0.06);
+    }
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      border-bottom: 1px solid #d9dee7;
+    }
+    .output-panel.collapsed pre {
+      display: none;
+    }
+    .output-panel pre {
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .output-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .output-actions button {
+      width: auto;
+      margin: 0;
+      padding: 5px 8px;
+    }
     .locale-control select {
       min-width: 112px;
       margin: 0;
@@ -108,14 +200,17 @@
 </head>
 <body>
   <header>
-    <strong data-i18n="app.title">Rhine-Vault Phase 4</strong>
-    <label class="locale-control">
-      <span data-i18n="language.label">语言</span>
-      <select id="locale-select" onchange="applyLocale(this.value)">
-        <option value="zh">中文</option>
-        <option value="en">English</option>
-      </select>
-    </label>
+    <strong data-i18n="app.title">Rhine-Vault Phase 6</strong>
+    <div class="header-actions">
+      <span id="status-pill" class="status-pill">Ready</span>
+      <label class="locale-control">
+        <span data-i18n="language.label">语言</span>
+        <select id="locale-select" onchange="applyLocale(this.value)">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </div>
   </header>
   <main>
     <nav>
@@ -124,11 +219,15 @@
       <button onclick="show('document')" data-i18n="nav.document">文档导入</button>
       <button onclick="show('project')" data-i18n="nav.project">项目导入</button>
       <button onclick="show('review')" data-i18n="nav.review">候选知识审核</button>
+      <button onclick="show('workflow')" data-i18n="nav.workflow">正式工作流状态</button>
+      <button onclick="show('nodes')" data-i18n="nodes.title">节点目录</button>
       <button onclick="show('search')" data-i18n="nav.search">搜索实验台</button>
       <button onclick="show('retrieval')" data-i18n="activity.retrieve">检索实验台</button>
       <button onclick="show('context')" data-i18n="nav.context">Context Bundle</button>
       <button onclick="show('llm')" data-i18n="nav.llm">LLM 调试台</button>
       <button onclick="show('mcp'); loadMcpCapabilities()" data-i18n="nav.mcp">MCP 能力</button>
+      <button onclick="show('phase5')" data-i18n="nav.phase5">索引与 Library</button>
+      <button onclick="show('recovery')" data-i18n="nav.recovery">恢复与迁移</button>
     </nav>
     <div>
       <section id="manual" class="active">
@@ -226,7 +325,14 @@
           <input id="retrieval-include-deprecated" type="checkbox">
           <span data-i18n="retrieval.include_deprecated">包含 deprecated 节点</span>
         </label>
+        <label class="field-label">
+          <input id="retrieval-enable-vector" type="checkbox">
+          <span data-i18n="retrieval.enable_vector">启用本地确定性向量通道</span>
+        </label>
         <button class="action" onclick="retrievalLab()" data-i18n="retrieval.run">运行 Retrieval Lab</button>
+        <button onclick="vectorSearch()" data-i18n="vector.search">只读向量搜索</button>
+        <button onclick="loadVectorBackends()" data-i18n="vector.backends">评估向量后端</button>
+        <pre id="vector-backends">Vector backend matrix will appear here.</pre>
       </section>
       <section id="context">
         <h2 data-i18n="context.title">Context Bundle 查看器</h2>
@@ -251,7 +357,102 @@
         <button class="action" onclick="readMcpResource()" data-i18n="mcp.resource.read">读取 Resource</button>
         <pre id="mcp-summary">MCP capabilities will appear here.</pre>
       </section>
-      <pre id="output" data-i18n="output.placeholder">结果会显示在这里。</pre>
+      <section id="phase5">
+        <h2 data-i18n="phase5.title">索引与 Library</h2>
+        <h3 data-i18n="phase5.index.title">派生索引</h3>
+        <label class="field-label" for="phase5-index-workspace" data-i18n="phase5.workspace.label">Workspace ID</label>
+        <input id="phase5-index-workspace" value="demo-workspace">
+        <button class="action" onclick="processIndexJobs()" data-i18n="phase5.process_jobs">执行 IndexJob</button>
+        <button onclick="rebuildIndexJobs()" data-i18n="phase5.rebuild_jobs">重建派生索引</button>
+        <button onclick="loadIndexChunks()" data-i18n="phase5.load_chunks">加载 Chunks</button>
+
+        <h3 data-i18n="phase5.library.title">Library Snapshot</h3>
+        <label class="field-label" for="phase5-library-workspace" data-i18n="phase5.library_workspace.label">Library Workspace ID</label>
+        <input id="phase5-library-workspace" value="library-neoforge-1-21-1">
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="phase5.version.label">版本</span>
+            <input id="phase5-library-version" value="1.0.0">
+          </label>
+          <label>
+            <span class="field-label" data-i18n="phase5.git_tag.label">Git Tag</span>
+            <input id="phase5-library-tag" value="v1.0.0">
+          </label>
+        </div>
+        <label class="field-label" for="phase5-library-commit" data-i18n="phase5.commit.label">Commit</label>
+        <input id="phase5-library-commit" placeholder="commit hash">
+        <button class="action" onclick="publishLibrarySnapshot()" data-i18n="phase5.publish_snapshot">发布 Snapshot</button>
+        <button onclick="listLibrarySnapshots()" data-i18n="phase5.list_snapshots">列出 Snapshots</button>
+
+        <h3 data-i18n="phase5.dependency.title">依赖锁定与升级报告</h3>
+        <label class="field-label" for="phase5-project-workspace" data-i18n="phase5.project_workspace.label">Project Workspace ID</label>
+        <input id="phase5-project-workspace" value="demo-workspace">
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="phase5.alias.label">依赖别名</span>
+            <input id="phase5-dependency-alias" value="neoforge">
+          </label>
+          <label>
+            <span class="field-label" data-i18n="phase5.version_requirement.label">版本要求</span>
+            <input id="phase5-version-requirement" value="~1.0.0">
+          </label>
+        </div>
+        <button class="action" onclick="lockWorkspaceDependency()" data-i18n="phase5.lock_dependency">锁定依赖</button>
+        <button onclick="listWorkspaceDependencies()" data-i18n="phase5.list_dependencies">列出依赖</button>
+        <button onclick="dependencyUpgradeReport()" data-i18n="phase5.upgrade_report">生成升级报告</button>
+      </section>
+      <section id="workflow">
+        <h2 data-i18n="workflow.title">正式工作流状态</h2>
+        <button class="action" onclick="loadWorkflowState()" data-i18n="workflow.load">加载工作流状态</button>
+        <div id="workflow-summary" class="summary-grid"></div>
+        <div class="panel-card">
+          <h3 data-i18n="workflow.external.title">ExternalChange 审核</h3>
+          <button onclick="detectExternalChanges()" data-i18n="workflow.external.detect">检测外部变更</button>
+          <label class="field-label" for="workflow-external-select" data-i18n="workflow.external.select">选择外部变更</label>
+          <select id="workflow-external-select"></select>
+          <button class="action" onclick="approveExternalChange()" data-i18n="workflow.external.approve">批准外部变更</button>
+          <button onclick="rejectExternalChange()" data-i18n="workflow.external.reject">驳回外部变更</button>
+        </div>
+        <pre id="workflow-details">Workflow state will appear here.</pre>
+      </section>
+      <section id="nodes">
+        <h2 data-i18n="nodes.title">节点目录</h2>
+        <button class="action" onclick="loadNodes()" data-i18n="sidebar.nodes.load">加载节点</button>
+        <label class="field-label" for="node-select">Node</label>
+        <select id="node-select" onchange="loadNodeRevisions()"></select>
+        <label class="field-label" for="node-rollback-revision">Revision</label>
+        <input id="node-rollback-revision" type="number" min="1" value="1">
+        <button onclick="loadNodeRevisions()" data-i18n="nodes.revisions">加载 revisions</button>
+        <button class="action" onclick="rollbackNode()" data-i18n="nodes.rollback">生成回滚 revision</button>
+        <pre id="node-details">Node details will appear here.</pre>
+      </section>
+      <section id="recovery">
+        <h2 data-i18n="recovery.title">恢复与迁移</h2>
+        <div class="panel-card">
+          <h3 data-i18n="recovery.snapshot.title">Workspace Snapshot</h3>
+          <button class="action" onclick="createWorkspaceSnapshot()" data-i18n="recovery.snapshot.create">创建 Snapshot</button>
+        </div>
+        <div class="panel-card">
+          <h3 data-i18n="recovery.import_plan.title">Import Plan</h3>
+          <label class="field-label" for="recovery-package-path" data-i18n="recovery.package_path">.rhine package path</label>
+          <input id="recovery-package-path" placeholder="E:\Project\Python\Rhine-Vault\.rhine\snapshots\...rhine">
+          <button onclick="buildImportPlan()" data-i18n="recovery.import_plan.build">只读验证 Import Plan</button>
+        </div>
+        <div class="panel-card">
+          <h3 data-i18n="recovery.emergency.title">Emergency Read-Only</h3>
+          <button onclick="emergencyReadonly()" data-i18n="recovery.emergency.read">读取只读节点</button>
+        </div>
+      </section>
+      <div id="output-panel" class="output-panel">
+        <div class="output-header">
+          <strong data-i18n="output.title">运行状态</strong>
+          <div class="output-actions">
+            <button onclick="toggleOutput()" data-i18n="output.toggle">折叠或展开运行状态</button>
+            <button onclick="out(null)" data-i18n="output.clear">清空</button>
+          </div>
+        </div>
+        <pre id="output" data-i18n="output.placeholder">结果会显示在这里。</pre>
+      </div>
     </div>
   </main>
   <script>
@@ -262,6 +463,7 @@
     let currentMessages = {};
     let conversationMessages = [];
     let cachedMcpCapabilities = null;
+    let cachedWorkflowState = null;
 
     document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll("[data-i18n-default]").forEach((element) => {
@@ -312,6 +514,7 @@
       renderConversationMessages();
       loadNodeTypes(catalog.locale);
       loadRetrievalProfiles();
+      show(document.querySelector("section.active")?.id || "manual");
     }
 
     async function loadNodeTypes(locale) {
@@ -339,30 +542,69 @@
       document.querySelectorAll("section").forEach((section) => {
         section.classList.remove("active");
       });
+      document.querySelectorAll("nav button").forEach((button) => {
+        button.classList.toggle("active", button.getAttribute("onclick")?.includes(`show('${id}')`));
+      });
       document.getElementById(id).classList.add("active");
+      if (id === "review") {
+        void loadReviewState({silent: true});
+      } else if (id === "workflow") {
+        void loadWorkflowState({silent: true});
+      } else if (id === "nodes") {
+        void loadNodes({silent: true});
+      } else if (id === "retrieval") {
+        void loadVectorBackends({silent: true});
+      } else if (id === "mcp") {
+        void loadMcpCapabilities({silent: true});
+      }
     }
     async function post(url, body) {
-      const res = await fetch(url, {
+      return request(url, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(body)
       });
-      out(await res.json());
+    }
+    async function request(url, options = {}) {
+      setStatus("Running...", true);
+      try {
+        const res = await fetch(url, options);
+        const payload = await res.json();
+        out(payload);
+        setStatus(res.ok ? "Done" : "Failed", false);
+        return payload;
+      } catch (error) {
+        const payload = {error: String(error)};
+        out(payload);
+        setStatus("Failed", false);
+        return payload;
+      }
     }
     function out(value) {
-      document.getElementById("output").textContent = JSON.stringify(value, null, 2);
+      document.getElementById("output").textContent = value === null
+        ? currentMessage("output.placeholder")
+        : JSON.stringify(value, null, 2);
     }
-    function manual() {
+    function setStatus(text, busy = false) {
+      const pill = document.getElementById("status-pill");
+      pill.textContent = text;
+      pill.classList.toggle("busy", busy);
+    }
+    function toggleOutput() {
+      document.getElementById("output-panel").classList.toggle("collapsed");
+    }
+    async function manual() {
       if (!val("manual-title").trim()) {
         out({error: currentMessage("manual.title.required")});
         return;
       }
-      post("/api/manual", {
+      await post("/api/manual", {
         workspace_id,
         title: val("manual-title"),
         node_type: val("manual-type"),
         content: val("manual-content")
       });
+      show("review");
     }
     function seedConversationMessages() {
       if (conversationMessages.length > 0 || !currentMessages["conversation.seed.user"]) {
@@ -413,51 +655,66 @@
         container.appendChild(item);
       });
     }
-    function conversation() {
+    async function conversation() {
       if (conversationMessages.length === 0) {
         out({error: currentMessage("conversation.empty")});
         return;
       }
-      post("/api/conversations/capture", {
+      await post("/api/conversations/capture", {
         workspace_id,
         session_id: val("conversation-session") || "ui-session",
         messages: conversationMessages
       });
+      show("review");
     }
-    function documentImport() {
-      post("/api/documents/import", {workspace_id, path: val("document-path")});
+    async function documentImport() {
+      await post("/api/documents/import", {workspace_id, path: val("document-path")});
+      show("review");
     }
-    function projectScan() {
-      post("/api/projects/scan", {workspace_id, root: val("project-root")});
+    async function projectScan() {
+      await post("/api/projects/scan", {workspace_id, root: val("project-root")});
+      show("review");
+    }
+    async function loadReviewState(options = {}) {
+      const [proposals, staging] = await Promise.all([
+        request(`/api/proposals?workspace_id=${workspace_id}`),
+        request(`/api/staging?workspace_id=${workspace_id}`)
+      ]);
+      cachedProposals = Array.isArray(proposals) ? proposals : [];
+      populateProposalOptions(cachedProposals);
+      populateStagingOptions(Array.isArray(staging) ? staging : []);
+      if (!options.silent) {
+        out({proposals: cachedProposals, staging});
+      }
     }
     async function loadProposals() {
-      const res = await fetch(`/api/proposals?workspace_id=${workspace_id}`);
-      const proposals = await res.json();
-      cachedProposals = proposals;
-      populateProposalOptions(proposals);
-      out(proposals);
+      const proposals = await request(`/api/proposals?workspace_id=${workspace_id}`);
+      cachedProposals = Array.isArray(proposals) ? proposals : [];
+      populateProposalOptions(cachedProposals);
     }
-    function stageProposal() {
+    async function stageProposal() {
       const proposalId = val("review-proposal-select");
-      post(`/api/proposals/${proposalId}/stage`, {
+      await post(`/api/proposals/${proposalId}/stage`, {
         workspace_id,
         temporary_ids: selectedValues("review-temp-select")
       });
+      await loadReviewState({silent: true});
     }
     async function loadStaging() {
-      const res = await fetch(`/api/staging?workspace_id=${workspace_id}`);
-      const entries = await res.json();
-      populateStagingOptions(entries);
-      out(entries);
+      const entries = await request(`/api/staging?workspace_id=${workspace_id}`);
+      populateStagingOptions(Array.isArray(entries) ? entries : []);
     }
-    function approveStaging() {
-      post("/api/staging/approve", {
+    async function approveStaging() {
+      await post("/api/staging/approve", {
         workspace_id,
         entry_ids: selectedValues("review-entry-select")
       });
+      await loadWorkflowState({silent: true});
+      show("workflow");
     }
-    function rejectProposal() {
-      post(`/api/proposals/${val("review-proposal-select")}/reject`, {workspace_id});
+    async function rejectProposal() {
+      await post(`/api/proposals/${val("review-proposal-select")}/reject`, {workspace_id});
+      await loadReviewState({silent: true});
     }
     function search() {
       post("/api/search", {workspace_id, query: val("search-query")});
@@ -492,8 +749,24 @@
         node_type: val("retrieval-node-type") || null,
         authority: val("retrieval-authority") || null,
         tags: splitIds("retrieval-tags"),
-        include_deprecated: document.getElementById("retrieval-include-deprecated").checked
+        include_deprecated: document.getElementById("retrieval-include-deprecated").checked,
+        enable_vector: document.getElementById("retrieval-enable-vector").checked
       });
+    }
+    function vectorSearch() {
+      post("/api/vector/search", {
+        workspace_id,
+        query: val("retrieval-query"),
+        result_limit: Number(val("retrieval-result-limit") || 8)
+      });
+    }
+    async function loadVectorBackends(options = {}) {
+      const payload = await request("/api/vector/backends");
+      document.getElementById("vector-backends").textContent = JSON.stringify(payload, null, 2);
+      if (options.silent) {
+        setStatus("Ready");
+      }
+      return payload;
     }
     function contextBundle() {
       post("/api/context", {workspace_id, query: val("context-query")});
@@ -530,6 +803,146 @@
       const uri = encodeURIComponent(val("mcp-resource-uri"));
       const res = await fetch(`/api/mcp/resources?uri=${uri}`);
       out(await res.json());
+    }
+    function processIndexJobs() {
+      post("/api/index-jobs/process", {workspace_id: val("phase5-index-workspace")});
+    }
+    function rebuildIndexJobs() {
+      post("/api/index-jobs/rebuild", {workspace_id: val("phase5-index-workspace")});
+    }
+    async function loadIndexChunks() {
+      const workspace = encodeURIComponent(val("phase5-index-workspace"));
+      const res = await fetch(`/api/index-chunks?workspace_id=${workspace}`);
+      out(await res.json());
+    }
+    function publishLibrarySnapshot() {
+      const libraryWorkspace = val("phase5-library-workspace");
+      post(`/api/libraries/${libraryWorkspace}/snapshots`, {
+        version: val("phase5-library-version"),
+        git_tag: val("phase5-library-tag") || null,
+        commit_hash: val("phase5-library-commit") || null
+      });
+    }
+    async function listLibrarySnapshots() {
+      const libraryWorkspace = encodeURIComponent(val("phase5-library-workspace"));
+      const res = await fetch(`/api/libraries/${libraryWorkspace}/snapshots`);
+      out(await res.json());
+    }
+    function lockWorkspaceDependency() {
+      const projectWorkspace = val("phase5-project-workspace");
+      post(`/api/workspaces/${projectWorkspace}/dependencies`, {
+        alias: val("phase5-dependency-alias"),
+        library_workspace_id: val("phase5-library-workspace"),
+        version: val("phase5-library-version"),
+        version_requirement: val("phase5-version-requirement") || null
+      });
+    }
+    async function listWorkspaceDependencies() {
+      const projectWorkspace = encodeURIComponent(val("phase5-project-workspace"));
+      const res = await fetch(`/api/workspaces/${projectWorkspace}/dependencies`);
+      out(await res.json());
+    }
+    async function dependencyUpgradeReport() {
+      const projectWorkspace = encodeURIComponent(val("phase5-project-workspace"));
+      const alias = encodeURIComponent(val("phase5-dependency-alias"));
+      await request(`/api/workspaces/${projectWorkspace}/dependencies/${alias}/upgrade-report`);
+    }
+    async function loadWorkflowState(options = {}) {
+      const payload = await request(`/api/workflow/state?workspace_id=${workspace_id}`);
+      cachedWorkflowState = payload;
+      renderWorkflowSummary(payload.counts || {});
+      populateExternalChangeOptions(payload.external_changes || []);
+      document.getElementById("workflow-details").textContent = JSON.stringify({
+        proposals: payload.proposals || [],
+        pending_staging: payload.pending_staging || [],
+        changesets: payload.changesets || [],
+        audit_events: payload.audit_events || [],
+        index_jobs: payload.index_jobs || [],
+        external_changes: payload.external_changes || []
+      }, null, 2);
+      if (options.silent) {
+        setStatus("Ready");
+      }
+      return payload;
+    }
+    async function detectExternalChanges() {
+      await post("/api/external-changes/detect", {workspace_id});
+      await loadWorkflowState({silent: true});
+    }
+    async function approveExternalChange() {
+      const changeId = val("workflow-external-select");
+      if (!changeId) {
+        out({error: currentMessage("workflow.external.empty")});
+        return;
+      }
+      await post(`/api/external-changes/${encodeURIComponent(changeId)}/approve`, {workspace_id});
+      await loadWorkflowState({silent: true});
+      await loadNodes({silent: true});
+    }
+    async function rejectExternalChange() {
+      const changeId = val("workflow-external-select");
+      if (!changeId) {
+        out({error: currentMessage("workflow.external.empty")});
+        return;
+      }
+      await post(`/api/external-changes/${encodeURIComponent(changeId)}/reject`, {workspace_id});
+      await loadWorkflowState({silent: true});
+    }
+    async function loadNodes(options = {}) {
+      const nodes = await request(`/api/nodes?workspace_id=${workspace_id}`);
+      populateNodeOptions(Array.isArray(nodes) ? nodes : []);
+      document.getElementById("node-details").textContent = JSON.stringify(nodes, null, 2);
+      if (!options.skipRevisions) {
+        await loadNodeRevisions({silent: true});
+      }
+      if (options.silent) {
+        setStatus("Ready");
+      }
+    }
+    async function loadNodeRevisions(options = {}) {
+      const nodeId = val("node-select");
+      if (!nodeId) {
+        return;
+      }
+      const revisions = await request(
+        `/api/nodes/${encodeURIComponent(nodeId)}/revisions?workspace_id=${workspace_id}`
+      );
+      const selectedRevision = Array.isArray(revisions) && revisions.length
+        ? revisions[0].revision
+        : 1;
+      document.getElementById("node-rollback-revision").value = selectedRevision;
+      document.getElementById("node-details").textContent = JSON.stringify({
+        node_id: nodeId,
+        revisions
+      }, null, 2);
+      if (options.silent) {
+        setStatus("Ready");
+      }
+    }
+    async function rollbackNode() {
+      const nodeId = val("node-select");
+      if (!nodeId) {
+        out({error: "Please select a node first."});
+        return;
+      }
+      await post(`/api/nodes/${encodeURIComponent(nodeId)}/rollback`, {
+        workspace_id,
+        revision: Number(val("node-rollback-revision") || 1)
+      });
+      await loadNodes({silent: true, skipRevisions: true});
+      await loadWorkflowState({silent: true});
+    }
+    async function createWorkspaceSnapshot() {
+      const payload = await post("/api/recovery/snapshots/workspace", {workspace_id});
+      if (payload && payload.package_path) {
+        document.getElementById("recovery-package-path").value = payload.package_path;
+      }
+    }
+    async function buildImportPlan() {
+      await post("/api/recovery/import-plan", {package_path: val("recovery-package-path")});
+    }
+    async function emergencyReadonly() {
+      await request(`/api/recovery/emergency-readonly?workspace_id=${workspace_id}`);
     }
     function val(id) {
       return document.getElementById(id).value;
@@ -574,9 +987,10 @@
       const select = document.getElementById("review-entry-select");
       select.replaceChildren();
       entries.forEach((entry) => {
+        const candidate = entry.candidate || entry.proposed_node || {};
         const option = document.createElement("option");
         option.value = entry.entry_id;
-        option.textContent = `${entry.status} · ${entry.proposed_node.title}`;
+        option.textContent = `${entry.status} · ${candidate.title || entry.entry_id}`;
         option.selected = true;
         select.appendChild(option);
       });
@@ -592,6 +1006,44 @@
       });
       if (!select.value && select.options.length > 0) {
         select.value = select.options[0].value;
+      }
+    }
+    function renderWorkflowSummary(counts) {
+      const container = document.getElementById("workflow-summary");
+      container.replaceChildren();
+      Object.entries(counts).forEach(([key, value]) => {
+        const tile = document.createElement("div");
+        tile.className = "summary-tile";
+        const strong = document.createElement("strong");
+        strong.textContent = String(value);
+        const label = document.createElement("span");
+        label.textContent = key;
+        tile.append(strong, label);
+        container.appendChild(tile);
+      });
+    }
+    function populateExternalChangeOptions(changes) {
+      const select = document.getElementById("workflow-external-select");
+      select.replaceChildren();
+      changes.forEach((change) => {
+        const option = document.createElement("option");
+        option.value = change.change_id;
+        option.textContent = `${change.status} · ${change.node_id || change.change_id}`;
+        select.appendChild(option);
+      });
+    }
+    function populateNodeOptions(nodes) {
+      const select = document.getElementById("node-select");
+      const selected = select.value;
+      select.replaceChildren();
+      nodes.forEach((node) => {
+        const option = document.createElement("option");
+        option.value = node.node_id;
+        option.textContent = `${node.title} · ${node.node_type} · r${node.revision}`;
+        select.appendChild(option);
+      });
+      if (Array.from(select.options).some((option) => option.value === selected)) {
+        select.value = selected;
       }
     }
   </script>

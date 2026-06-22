@@ -54,8 +54,12 @@ nav:
       - Phase 2 Formal Workflow: implementation/PHASE_2_FORMAL_WORKFLOW.md
       - Phase 3 Formal Retrieval: implementation/PHASE_3_FORMAL_RETRIEVAL.md
       - Phase 4 Formal UI and MCP: implementation/PHASE_4_FORMAL_UI_MCP.md
+      - Phase 5 Indexing and Libraries: implementation/PHASE_5_INDEXING_AND_LIBRARIES.md
+      - Phase 6 Vector Migration Recovery: implementation/PHASE_6_VECTOR_MIGRATION_RECOVERY.md
+      - First Usable Version: implementation/FIRST_USABLE_VERSION.md
       - UI Panel Migration: implementation/UI_PANEL_MIGRATION.md
       - WebUI Plugin Concepts: implementation/WEBUI_PLUGIN_CONCEPTS.md
+      - CMCC Rhine Integration: implementation/CMCC_RHINE_INTEGRATION_PLAN.md
       - Consistency Check: implementation/CONSISTENCY_CHECK.md
       - Project Style Standard: implementation/PROJECT_STYLE_STANDARD_TEMPLATE.md
       - Style Adoption: implementation/STYLE_ADOPTION.md

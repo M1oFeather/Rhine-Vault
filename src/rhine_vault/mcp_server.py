@@ -7,11 +7,11 @@ from __future__ import annotations
 import importlib
 import os
 from pathlib import Path
-from tempfile import gettempdir
 from typing import Any
 
 from rhine_vault.capture.service import CaptureService
 from rhine_vault.mcp_bridge import MCPBridge
+from rhine_vault.runtime_paths import default_database_path
 from rhine_vault.storage.sqlite import SQLiteStore
 
 
@@ -153,10 +153,7 @@ def _load_fastmcp_module() -> Any:
 
 
 def _default_database_path() -> Path:
-    configured = os.getenv("RHINE_VAULT_DB")
-    if configured:
-        return Path(configured)
-    return Path(gettempdir()) / "rhine-vault-dev.db"
+    return default_database_path()
 
 
 if __name__ == "__main__":

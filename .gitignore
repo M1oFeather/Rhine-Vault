@@ -17,6 +17,7 @@ ui/dist/
 .idea/
 
 # Local databases and runtime state
+.rhine/
 *.db
 *.sqlite
 *.sqlite3

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Iterator
@@ -15,7 +16,7 @@ from typing import Any
 from uuid import uuid4
 
 from rhine_vault.domain.ids import validate_actor_id, validate_node_id, validate_workspace_id
-from rhine_vault.markdown import parse_markdown_document
+from rhine_vault.markdown import chunk_markdown, parse_markdown_document
 from rhine_vault.workflow import (
     build_node_diff,
     commit_paths,
@@ -209,6 +210,55 @@ class SQLiteStore:
                     content TEXT NOT NULL,
                     ordinal INTEGER NOT NULL,
                     created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS index_chunks (
+                    chunk_id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    chunk_type TEXT NOT NULL,
+                    token_count INTEGER NOT NULL,
+                    heading_path_json TEXT NOT NULL,
+                    chunking_profile_id TEXT NOT NULL,
+                    chunking_profile_revision INTEGER NOT NULL,
+                    parser_version TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS workspace_records (
+                    workspace_id TEXT PRIMARY KEY,
+                    workspace_type TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    root_path TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS library_snapshots (
+                    snapshot_id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    git_tag TEXT,
+                    commit_hash TEXT,
+                    manifest_hash TEXT NOT NULL,
+                    manifest_json TEXT NOT NULL,
+                    snapshot_path TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(workspace_id, version)
+                );
+                CREATE TABLE IF NOT EXISTS workspace_dependencies (
+                    project_workspace_id TEXT NOT NULL,
+                    alias TEXT NOT NULL,
+                    library_workspace_id TEXT NOT NULL,
+                    version_requirement TEXT NOT NULL,
+                    resolved_version TEXT NOT NULL,
+                    git_tag TEXT,
+                    commit_hash TEXT,
+                    manifest_hash TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(project_workspace_id, alias)
                 );
                 """
             )
@@ -1148,6 +1198,544 @@ class SQLiteStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def rebuild_derived_index(self, workspace_id: str) -> list[dict[str, Any]]:
+        validate_workspace_id(workspace_id)
+        now = _now()
+        jobs: list[dict[str, Any]] = []
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT node_id, revision FROM memory_nodes
+                WHERE workspace_id = ?
+                ORDER BY title
+                """,
+                (workspace_id,),
+            ).fetchall()
+            for row in rows:
+                job = {
+                    "job_id": str(uuid.uuid4()),
+                    "workspace_id": workspace_id,
+                    "node_id": row["node_id"],
+                    "revision": int(row["revision"]),
+                    "operation": "rebuild",
+                    "status": "queued",
+                    "attempts": 0,
+                    "error_message": None,
+                    "created_at": now,
+                }
+                connection.execute(
+                    "INSERT INTO index_jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        job["job_id"],
+                        job["workspace_id"],
+                        job["node_id"],
+                        job["revision"],
+                        job["operation"],
+                        job["status"],
+                        job["attempts"],
+                        job["error_message"],
+                        job["created_at"],
+                    ),
+                )
+                jobs.append(job)
+        return jobs
+
+    def process_index_jobs(
+        self,
+        workspace_id: str,
+        *,
+        limit: int = 20,
+        chunking_profile_id: str = "technical",
+        chunking_profile_revision: int = 1,
+    ) -> dict[str, Any]:
+        validate_workspace_id(workspace_id)
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        processed: list[dict[str, Any]] = []
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM index_jobs
+                WHERE workspace_id = ? AND status IN ('queued', 'failed')
+                ORDER BY created_at
+                LIMIT ?
+                """,
+                (workspace_id, limit),
+            ).fetchall()
+            for row in rows:
+                try:
+                    processed.append(
+                        self._process_one_index_job(
+                            connection,
+                            row=row,
+                            chunking_profile_id=chunking_profile_id,
+                            chunking_profile_revision=chunking_profile_revision,
+                        )
+                    )
+                except Exception as exc:  # pragma: no cover - exercised through failure state
+                    attempts = int(row["attempts"]) + 1
+                    connection.execute(
+                        """
+                        UPDATE index_jobs
+                        SET status = ?, attempts = ?, error_message = ?
+                        WHERE job_id = ?
+                        """,
+                        ("failed", attempts, str(exc), row["job_id"]),
+                    )
+                    processed.append(
+                        {
+                            **dict(row),
+                            "status": "failed",
+                            "attempts": attempts,
+                            "error_message": str(exc),
+                        }
+                    )
+        return {"processed": processed, "count": len(processed)}
+
+    def _process_one_index_job(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        row: sqlite3.Row,
+        chunking_profile_id: str,
+        chunking_profile_revision: int,
+    ) -> dict[str, Any]:
+        job = dict(row)
+        attempts = int(row["attempts"]) + 1
+        node = connection.execute(
+            """
+            SELECT * FROM memory_nodes
+            WHERE workspace_id = ? AND node_id = ?
+            """,
+            (row["workspace_id"], row["node_id"]),
+        ).fetchone()
+        if node is None:
+            connection.execute(
+                "DELETE FROM index_chunks WHERE workspace_id = ? AND node_id = ?",
+                (row["workspace_id"], row["node_id"]),
+            )
+            chunk_count = 0
+        else:
+            snapshot = _memory_node_from_row(node)
+            markdown = render_node_markdown(snapshot, revision=int(snapshot["revision"]))
+            document = parse_markdown_document(markdown)
+            chunks = chunk_markdown(
+                document.body,
+                workspace_id=str(row["workspace_id"]),
+                node_id=str(row["node_id"]),
+                node_revision=int(row["revision"]),
+                chunking_profile_id=chunking_profile_id,
+                chunking_profile_revision=chunking_profile_revision,
+            )
+            connection.execute(
+                "DELETE FROM index_chunks WHERE workspace_id = ? AND node_id = ?",
+                (row["workspace_id"], row["node_id"]),
+            )
+            now = _now()
+            for chunk in chunks:
+                connection.execute(
+                    """
+                    INSERT INTO index_chunks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        chunk.chunk_id,
+                        chunk.workspace_id,
+                        chunk.node_id,
+                        chunk.node_revision,
+                        chunk.sequence,
+                        chunk.chunk_type,
+                        chunk.token_count,
+                        json.dumps(list(chunk.heading_path), ensure_ascii=False),
+                        chunk.chunking_profile_id,
+                        chunk.chunking_profile_revision,
+                        chunk.parser_version,
+                        chunk.content,
+                        now,
+                    ),
+                )
+            chunk_count = len(chunks)
+        connection.execute(
+            """
+            UPDATE index_jobs
+            SET status = ?, attempts = ?, error_message = ?
+            WHERE job_id = ?
+            """,
+            ("succeeded", attempts, None, row["job_id"]),
+        )
+        return {
+            **job,
+            "status": "succeeded",
+            "attempts": attempts,
+            "error_message": None,
+            "chunk_count": chunk_count,
+        }
+
+    def list_index_chunks(
+        self, *, workspace_id: str, node_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        validate_workspace_id(workspace_id)
+        with self.connect() as connection:
+            if node_id is None:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM index_chunks
+                    WHERE workspace_id = ?
+                    ORDER BY node_id, sequence
+                    """,
+                    (workspace_id,),
+                ).fetchall()
+            else:
+                validate_node_id(node_id)
+                rows = connection.execute(
+                    """
+                    SELECT * FROM index_chunks
+                    WHERE workspace_id = ? AND node_id = ?
+                    ORDER BY sequence
+                    """,
+                    (workspace_id, node_id),
+                ).fetchall()
+        return [_index_chunk_from_row(row) for row in rows]
+
+    def register_workspace(
+        self,
+        *,
+        workspace_id: str,
+        workspace_type: str = "project",
+        display_name: str | None = None,
+    ) -> dict[str, Any]:
+        validate_workspace_id(workspace_id)
+        if workspace_type not in {"project", "library"}:
+            raise ValueError("workspace_type must be project or library")
+        now = _now()
+        record = {
+            "workspace_id": workspace_id,
+            "workspace_type": workspace_type,
+            "display_name": _clean_title(display_name) or workspace_id,
+            "root_path": str(self.vault_root / "data" / "workspaces" / workspace_id),
+            "created_at": now,
+            "updated_at": now,
+        }
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT * FROM workspace_records WHERE workspace_id = ?",
+                (workspace_id,),
+            ).fetchone()
+            if existing is not None and existing["workspace_type"] != workspace_type:
+                raise ValueError("workspace already registered with a different type")
+            connection.execute(
+                """
+                INSERT INTO workspace_records VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(workspace_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    root_path = excluded.root_path,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    workspace_id,
+                    workspace_type,
+                    record["display_name"],
+                    record["root_path"],
+                    record["created_at"],
+                    record["updated_at"],
+                ),
+            )
+        return record
+
+    def publish_library_snapshot(
+        self,
+        *,
+        workspace_id: str,
+        version: str,
+        git_tag: str | None = None,
+        commit_hash: str | None = None,
+    ) -> dict[str, Any]:
+        validate_workspace_id(workspace_id)
+        clean_version = _require_clean(version, "version")
+        self.register_workspace(workspace_id=workspace_id, workspace_type="library")
+        now = _now()
+        nodes = self.list_memory_nodes(workspace_id)
+        manifest_nodes = [
+            {
+                "node_id": node["node_id"],
+                "title": node["title"],
+                "node_type": node["node_type"],
+                "authority": node["authority"],
+                "status": node["status"],
+                "revision": node["revision"],
+                "content_hash": _text_hash(
+                    render_node_markdown(node, revision=int(node["revision"]))
+                ),
+            }
+            for node in nodes
+        ]
+        manifest = {
+            "kind": "rhine-library-snapshot",
+            "workspace_id": workspace_id,
+            "version": clean_version,
+            "git_tag": git_tag,
+            "commit_hash": commit_hash,
+            "created_at": now,
+            "node_count": len(manifest_nodes),
+            "nodes": manifest_nodes,
+        }
+        manifest_text = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2)
+        manifest_hash = f"sha256:{_text_hash(manifest_text)}"
+        snapshot_path = (
+            self.vault_root
+            / "data"
+            / "libraries"
+            / workspace_id
+            / "snapshots"
+            / clean_version
+            / "manifest.json"
+        )
+        with self.connect() as connection:
+            existing = connection.execute(
+                """
+                SELECT snapshot_id FROM library_snapshots
+                WHERE workspace_id = ? AND version = ?
+                """,
+                (workspace_id, clean_version),
+            ).fetchone()
+            if existing is not None:
+                raise ValueError("library snapshot already exists")
+            snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            snapshot_path.write_text(manifest_text, encoding="utf-8")
+            snapshot = {
+                "snapshot_id": str(uuid.uuid4()),
+                "workspace_id": workspace_id,
+                "version": clean_version,
+                "git_tag": git_tag,
+                "commit_hash": commit_hash,
+                "manifest_hash": manifest_hash,
+                "manifest": manifest,
+                "snapshot_path": str(snapshot_path.relative_to(self.vault_root)),
+                "created_at": now,
+            }
+            connection.execute(
+                "INSERT INTO library_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    snapshot["snapshot_id"],
+                    workspace_id,
+                    clean_version,
+                    git_tag,
+                    commit_hash,
+                    manifest_hash,
+                    manifest_text,
+                    snapshot["snapshot_path"],
+                    now,
+                ),
+            )
+        return snapshot
+
+    def read_library_snapshot(self, *, workspace_id: str, version: str) -> dict[str, Any]:
+        validate_workspace_id(workspace_id)
+        clean_version = _require_clean(version, "version")
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM library_snapshots
+                WHERE workspace_id = ? AND version = ?
+                """,
+                (workspace_id, clean_version),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"{workspace_id}@{clean_version}")
+        return _library_snapshot_from_row(row)
+
+    def list_library_snapshots(self, workspace_id: str) -> list[dict[str, Any]]:
+        validate_workspace_id(workspace_id)
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM library_snapshots
+                WHERE workspace_id = ?
+                ORDER BY created_at
+                """,
+                (workspace_id,),
+            ).fetchall()
+        snapshots = [_library_snapshot_from_row(row) for row in rows]
+        return sorted(snapshots, key=lambda snapshot: _version_key(str(snapshot["version"])))
+
+    def lock_workspace_dependency(
+        self,
+        *,
+        project_workspace_id: str,
+        alias: str,
+        library_workspace_id: str,
+        version: str,
+        version_requirement: str | None = None,
+    ) -> dict[str, Any]:
+        validate_workspace_id(project_workspace_id)
+        validate_workspace_id(library_workspace_id)
+        clean_alias = _require_clean(alias, "alias")
+        snapshot = self.read_library_snapshot(workspace_id=library_workspace_id, version=version)
+        now = _now()
+        dependency = {
+            "project_workspace_id": project_workspace_id,
+            "alias": clean_alias,
+            "library_workspace_id": library_workspace_id,
+            "version_requirement": version_requirement or version,
+            "resolved_version": snapshot["version"],
+            "git_tag": snapshot["git_tag"],
+            "commit_hash": snapshot["commit_hash"],
+            "manifest_hash": snapshot["manifest_hash"],
+            "status": "locked",
+            "created_at": now,
+            "updated_at": now,
+        }
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO workspace_dependencies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_workspace_id, alias) DO UPDATE SET
+                    library_workspace_id = excluded.library_workspace_id,
+                    version_requirement = excluded.version_requirement,
+                    resolved_version = excluded.resolved_version,
+                    git_tag = excluded.git_tag,
+                    commit_hash = excluded.commit_hash,
+                    manifest_hash = excluded.manifest_hash,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    project_workspace_id,
+                    clean_alias,
+                    library_workspace_id,
+                    dependency["version_requirement"],
+                    dependency["resolved_version"],
+                    dependency["git_tag"],
+                    dependency["commit_hash"],
+                    dependency["manifest_hash"],
+                    dependency["status"],
+                    dependency["created_at"],
+                    dependency["updated_at"],
+                ),
+            )
+        self._write_lock_file(project_workspace_id)
+        return dependency
+
+    def list_workspace_dependencies(self, project_workspace_id: str) -> list[dict[str, Any]]:
+        validate_workspace_id(project_workspace_id)
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM workspace_dependencies
+                WHERE project_workspace_id = ?
+                ORDER BY alias
+                """,
+                (project_workspace_id,),
+            ).fetchall()
+        return [_workspace_dependency_from_row(row) for row in rows]
+
+    def dependency_upgrade_report(
+        self,
+        *,
+        project_workspace_id: str,
+        alias: str,
+        target_version: str | None = None,
+    ) -> dict[str, Any]:
+        validate_workspace_id(project_workspace_id)
+        clean_alias = _require_clean(alias, "alias")
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM workspace_dependencies
+                WHERE project_workspace_id = ? AND alias = ?
+                """,
+                (project_workspace_id, clean_alias),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"{project_workspace_id}:{clean_alias}")
+        dependency = _workspace_dependency_from_row(row)
+        current = self.read_library_snapshot(
+            workspace_id=dependency["library_workspace_id"],
+            version=dependency["resolved_version"],
+        )
+        target = self._resolve_upgrade_target(
+            library_workspace_id=dependency["library_workspace_id"],
+            current_version=dependency["resolved_version"],
+            target_version=target_version,
+        )
+        changes = _compare_snapshot_manifests(current["manifest"], target["manifest"])
+        has_upgrade = current["manifest_hash"] != target["manifest_hash"]
+        return {
+            "kind": "library-upgrade-report",
+            "project_workspace_id": project_workspace_id,
+            "alias": clean_alias,
+            "library_workspace_id": dependency["library_workspace_id"],
+            "current_version": current["version"],
+            "target_version": target["version"],
+            "current_manifest_hash": current["manifest_hash"],
+            "target_manifest_hash": target["manifest_hash"],
+            "has_upgrade": has_upgrade,
+            "requires_approval": has_upgrade,
+            "applied": False,
+            "summary": {
+                "added": len(changes["added"]),
+                "removed": len(changes["removed"]),
+                "changed": len(changes["changed"]),
+                "unchanged": changes["unchanged"],
+            },
+            "changes": {
+                "added": changes["added"],
+                "removed": changes["removed"],
+                "changed": changes["changed"],
+            },
+        }
+
+    def _resolve_upgrade_target(
+        self,
+        *,
+        library_workspace_id: str,
+        current_version: str,
+        target_version: str | None,
+    ) -> dict[str, Any]:
+        if target_version is not None:
+            return self.read_library_snapshot(
+                workspace_id=library_workspace_id,
+                version=target_version,
+            )
+        snapshots = self.list_library_snapshots(library_workspace_id)
+        if not snapshots:
+            raise KeyError(library_workspace_id)
+        current_key = _version_key(current_version)
+        newer = [
+            snapshot
+            for snapshot in snapshots
+            if _version_key(str(snapshot["version"])) > current_key
+        ]
+        return (
+            newer[-1]
+            if newer
+            else self.read_library_snapshot(
+                workspace_id=library_workspace_id,
+                version=current_version,
+            )
+        )
+
+    def _write_lock_file(self, project_workspace_id: str) -> Path:
+        dependencies = self.list_workspace_dependencies(project_workspace_id)
+        lock_path = (
+            self.vault_root / "data" / "workspaces" / project_workspace_id / "rhine-lock.yaml"
+        )
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lines = ["dependencies:"]
+        for dependency in dependencies:
+            lines.extend(
+                [
+                    f"  {dependency['alias']}:",
+                    f"    workspace_id: {dependency['library_workspace_id']}",
+                    f"    version_requirement: {dependency['version_requirement']}",
+                    f"    resolved_version: {dependency['resolved_version']}",
+                    f"    git_tag: {dependency['git_tag'] or ''}",
+                    f"    commit: {dependency['commit_hash'] or ''}",
+                    f"    manifest_hash: {dependency['manifest_hash']}",
+                ]
+            )
+        lock_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return lock_path
+
     def detect_external_changes(self, workspace_id: str) -> list[dict[str, Any]]:
         validate_workspace_id(workspace_id)
         nodes_dir = self.vault_root / "data" / "workspaces" / workspace_id / "nodes"
@@ -1646,14 +2234,22 @@ class SQLiteStore:
             "SELECT workspace_id FROM sources",
         )
         workspace_ids: set[str] = set()
+        records: dict[str, dict[str, Any]] = {}
         with self.connect() as connection:
+            record_rows = connection.execute("SELECT * FROM workspace_records").fetchall()
+            records = {
+                str(row["workspace_id"]): _workspace_record_from_row(row) for row in record_rows
+            }
             for query in queries:
                 workspace_ids.update(
                     str(row["workspace_id"]) for row in connection.execute(query).fetchall()
                 )
+        workspace_ids.update(records)
         return [
             {
                 "workspace_id": workspace_id,
+                "workspace_type": records.get(workspace_id, {}).get("workspace_type", "project"),
+                "display_name": records.get(workspace_id, {}).get("display_name", workspace_id),
                 "vault_root": str(self.vault_root),
             }
             for workspace_id in sorted(workspace_ids)
@@ -1732,6 +2328,103 @@ def _proposal_from_row(row: sqlite3.Row) -> dict[str, Any]:
         "confidence": row["confidence"],
         "status": row["status"],
         "created_at": row["created_at"],
+    }
+
+
+def _index_chunk_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "chunk_id": row["chunk_id"],
+        "workspace_id": row["workspace_id"],
+        "node_id": row["node_id"],
+        "revision": row["revision"],
+        "sequence": row["sequence"],
+        "chunk_type": row["chunk_type"],
+        "token_count": row["token_count"],
+        "heading_path": json.loads(row["heading_path_json"]),
+        "chunking_profile_id": row["chunking_profile_id"],
+        "chunking_profile_revision": row["chunking_profile_revision"],
+        "parser_version": row["parser_version"],
+        "content": row["content"],
+        "created_at": row["created_at"],
+    }
+
+
+def _workspace_record_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "workspace_id": row["workspace_id"],
+        "workspace_type": row["workspace_type"],
+        "display_name": row["display_name"],
+        "root_path": row["root_path"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _library_snapshot_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "snapshot_id": row["snapshot_id"],
+        "workspace_id": row["workspace_id"],
+        "version": row["version"],
+        "git_tag": row["git_tag"],
+        "commit_hash": row["commit_hash"],
+        "manifest_hash": row["manifest_hash"],
+        "manifest": json.loads(row["manifest_json"]),
+        "snapshot_path": row["snapshot_path"],
+        "created_at": row["created_at"],
+    }
+
+
+def _workspace_dependency_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "project_workspace_id": row["project_workspace_id"],
+        "alias": row["alias"],
+        "library_workspace_id": row["library_workspace_id"],
+        "version_requirement": row["version_requirement"],
+        "resolved_version": row["resolved_version"],
+        "git_tag": row["git_tag"],
+        "commit_hash": row["commit_hash"],
+        "manifest_hash": row["manifest_hash"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _compare_snapshot_manifests(
+    current_manifest: dict[str, Any],
+    target_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    current_nodes = {str(node["node_id"]): node for node in current_manifest.get("nodes", [])}
+    target_nodes = {str(node["node_id"]): node for node in target_manifest.get("nodes", [])}
+    added_ids = sorted(set(target_nodes) - set(current_nodes))
+    removed_ids = sorted(set(current_nodes) - set(target_nodes))
+    common_ids = sorted(set(current_nodes) & set(target_nodes))
+    changed = []
+    unchanged = 0
+    for node_id in common_ids:
+        before = current_nodes[node_id]
+        after = target_nodes[node_id]
+        fields = {
+            field: {"before": before.get(field), "after": after.get(field)}
+            for field in (
+                "title",
+                "node_type",
+                "authority",
+                "status",
+                "revision",
+                "content_hash",
+            )
+            if before.get(field) != after.get(field)
+        }
+        if fields:
+            changed.append({"node_id": node_id, "fields": fields})
+        else:
+            unchanged += 1
+    return {
+        "added": [target_nodes[node_id] for node_id in added_ids],
+        "removed": [current_nodes[node_id] for node_id in removed_ids],
+        "changed": changed,
+        "unchanged": unchanged,
     }
 
 
@@ -1920,6 +2613,26 @@ def _now() -> str:
 
 def _text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _require_clean(value: str, field_name: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty")
+    if any(character.isspace() for character in cleaned):
+        raise ValueError(f"{field_name} cannot contain whitespace")
+    if any(character in cleaned for character in ("..", "/", "\\", ":")):
+        raise ValueError(f"{field_name} contains an unsafe character")
+    return cleaned
+
+
+def _version_key(version: str) -> tuple[object, ...]:
+    parts: list[object] = []
+    for part in re.split(r"[.\-+_]", version):
+        if not part:
+            continue
+        parts.append(int(part) if part.isdigit() else part)
+    return tuple(parts)
 
 
 def _commit_message(*, workspace_id: str, changeset_ids: tuple[str, ...]) -> str:

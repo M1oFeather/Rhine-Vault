@@ -905,7 +905,7 @@ def test_fastapi_endpoints_and_api_docs(tmp_path: Path, monkeypatch: pytest.Monk
     en_catalog = client.get("/api/i18n?locale=en-US").json()
     fallback_catalog = client.get("/api/i18n?locale=fr").json()
     assert zh_catalog["locale"] == "zh"
-    assert zh_catalog["messages"]["app.title"] == "Rhine-Vault Phase 4"
+    assert zh_catalog["messages"]["app.title"] == "Rhine-Vault Phase 6"
     assert zh_catalog["messages"]["manual.title"] == "手动节点编辑"
     assert zh_catalog["messages"]["search.title"] == "Retrieval Lab"
     assert zh_catalog["messages"]["retrieval.run"] == "运行 Retrieval Lab"
@@ -941,7 +941,10 @@ def test_fastapi_endpoints_and_api_docs(tmp_path: Path, monkeypatch: pytest.Monk
     assert en_catalog["messages"]["retrieval.run"] == "Run Retrieval Lab"
     assert en_catalog["messages"]["settings.title"] == "Runtime Settings"
     assert en_catalog["messages"]["nav.mcp"] == "MCP Capabilities"
+    assert en_catalog["messages"]["nav.recovery"] == "Recovery and Migration"
     assert en_catalog["messages"]["mcp.title"] == "MCP Capability Boundary"
+    assert en_catalog["messages"]["vector.backends"] == "Evaluate Vector Backends"
+    assert en_catalog["messages"]["recovery.import_plan.build"] == "Validate Import Plan"
     assert en_catalog["messages"]["llm.provider.openai"] == "OpenAI"
     assert en_catalog["messages"]["llm.provider.deepseek"] == "DeepSeek"
     assert fallback_catalog["locale"] == "zh"

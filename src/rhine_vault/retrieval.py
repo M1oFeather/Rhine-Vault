@@ -8,6 +8,7 @@ from typing import Any
 from rhine_vault.context import ContextBundle
 from rhine_vault.domain.models import RetrievalProfile
 from rhine_vault.storage.sqlite import SQLiteStore
+from rhine_vault.vector import HashEmbeddingProvider, search_index_chunks
 
 PROFILE_PRESETS: dict[str, dict[str, Any]] = {
     "technical-documentation": {
@@ -43,7 +44,7 @@ PROFILE_PRESETS: dict[str, dict[str, Any]] = {
         "exact_weight": 1.4,
         "metadata_weight": 1.2,
         "fts_weight": 1.6,
-        "vector_weight": 0.0,
+        "vector_weight": 1.1,
         "rrf_k": 60,
         "relation_depth": 1,
         "result_limit": 8,
@@ -81,6 +82,7 @@ class RetrievalOverrides:
     node_type: str | None = None
     authority: str | None = None
     tags: tuple[str, ...] = ()
+    enable_vector: bool = False
 
 
 @dataclass
@@ -192,11 +194,19 @@ def retrieve_lab(
         tags=active_overrides.tags,
     )
     node_by_id = {node["node_id"]: node for node in nodes}
+    vector_candidates, vector_channel = _vector_candidates(
+        store=store,
+        workspace_id=workspace_id,
+        query=query,
+        node_by_id=node_by_id,
+        enabled=active_overrides.enable_vector,
+        weight=selected_profile.vector_weight,
+    )
     channels = {
         "exact": _exact_candidates(nodes, query),
         "metadata": _metadata_candidates(nodes, query),
         "fts": _fts_candidates(store, workspace_id, query, node_by_id),
-        "vector": [],
+        "vector": vector_candidates,
     }
     fused = _weighted_rrf(channels=channels, profile=selected_profile)
     reranked, filtered, warnings = _rerank_and_filter(fused, selected_profile)
@@ -221,10 +231,7 @@ def retrieve_lab(
     explain_trace = {
         "query": query,
         "profile_id": selected_profile.profile_id,
-        "vector_channel": {
-            "enabled": False,
-            "reason": "Phase 3 does not enable ChromaDB or production vector indexes.",
-        },
+        "vector_channel": vector_channel,
         "channels": {
             name: [_candidate_trace(candidate) for candidate in candidates]
             for name, candidates in channels.items()
@@ -369,6 +376,78 @@ def _fts_candidates(
             )
         )
     return candidates
+
+
+def _vector_candidates(
+    *,
+    store: SQLiteStore,
+    workspace_id: str,
+    query: str,
+    node_by_id: dict[str, dict[str, Any]],
+    enabled: bool,
+    weight: float,
+) -> tuple[list[ChannelCandidate], dict[str, Any]]:
+    provider = HashEmbeddingProvider()
+    if not enabled:
+        return [], {
+            "enabled": False,
+            "provider_id": provider.provider_id,
+            "source": "index_chunks",
+            "reason": "Vector channel is disabled unless enable_vector=true.",
+        }
+    if weight <= 0:
+        return [], {
+            "enabled": False,
+            "provider_id": provider.provider_id,
+            "source": "index_chunks",
+            "reason": "Selected Retrieval Profile has vector_weight=0.",
+        }
+    chunks = store.list_index_chunks(workspace_id=workspace_id)
+    if not chunks:
+        return [], {
+            "enabled": True,
+            "provider_id": provider.provider_id,
+            "source": "index_chunks",
+            "candidate_count": 0,
+            "reason": "No derived index chunks are available. Process IndexJobs first.",
+        }
+    result = search_index_chunks(
+        chunks=chunks,
+        workspace_id=workspace_id,
+        query=query,
+        limit=30,
+        node_ids=set(node_by_id),
+        provider=provider,
+    )
+    best_by_node: dict[str, dict[str, Any]] = {}
+    for hit in result["hits"]:
+        node_id = str(hit["node_id"])
+        existing = best_by_node.get(node_id)
+        if existing is None or float(hit["score"]) > float(existing["score"]):
+            best_by_node[node_id] = hit
+    ranked_hits = sorted(
+        best_by_node.values(),
+        key=lambda hit: (-float(hit["score"]), str(hit["node_id"])),
+    )
+    candidates = [
+        ChannelCandidate(
+            node=node_by_id[str(hit["node_id"])],
+            channel="vector",
+            rank=index + 1,
+            raw_score=float(hit["score"]),
+            matched=(f"chunk:{hit['chunk_id']}",),
+        )
+        for index, hit in enumerate(ranked_hits)
+        if str(hit["node_id"]) in node_by_id
+    ]
+    return candidates, {
+        "enabled": True,
+        "provider_id": result["provider_id"],
+        "dimension": result["dimension"],
+        "source": result["source"],
+        "candidate_count": len(candidates),
+        "reason": "Local deterministic vector search over rebuildable index_chunks.",
+    }
 
 
 def _weighted_rrf(
