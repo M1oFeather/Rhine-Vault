@@ -13,6 +13,7 @@ from rhine_vault.capture.rules import (
     extract_project_nodes,
     stable_node_id,
 )
+from rhine_vault.document_loaders import load_document_text
 from rhine_vault.domain.ids import validate_workspace_id
 from rhine_vault.storage.sqlite import SQLiteStore
 
@@ -121,9 +122,10 @@ class CaptureService:
 
     def create_document_proposal(self, *, workspace_id: str, path: Path) -> dict[str, Any]:
         validate_workspace_id(workspace_id)
-        if path.suffix.lower() not in {".md", ".txt"}:
-            raise ValueError("Phase 1.5 only supports Markdown and TXT")
-        text = path.read_text(encoding="utf-8")
+        loaded = load_document_text(path)
+        text = loaded.text
+        if not text.strip():
+            raise ValueError("document loader produced no text")
         content_hash = _sha256(text)
         source = self.store.add_source(
             workspace_id=workspace_id,
@@ -132,7 +134,12 @@ class CaptureService:
             locator=str(path),
             content_hash=content_hash,
             body=text,
-            metadata={"path": str(path), "hash": content_hash},
+            metadata={
+                "path": str(path),
+                "hash": content_hash,
+                "source_format": loaded.source_format,
+                **loaded.metadata,
+            },
         )
         drafts = extract_document_nodes(locator=str(path), content_hash=content_hash, markdown=text)
         proposal = self.store.add_proposal(

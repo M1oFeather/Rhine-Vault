@@ -2,11 +2,14 @@
 
 ## Active
 
-Phase 6 - Vector, Migration and Recovery
+Full Implementation Mode
 
 ## Implementation status
 
-Phase 6 implementation is in progress after explicit user advancement.
+Phase gates are lifted after explicit user instruction on 2026-06-23.
+Future work may implement previously deferred capabilities as long as the core
+architecture contract remains intact: local-first, audited knowledge, human
+review boundaries for formal knowledge, and core-only install safety.
 
 ## Authorized work
 
@@ -21,6 +24,7 @@ Phase 6 implementation is in progress after explicit user advancement.
 - Read-only vector backend capability probe for Phase 6 Chroma adapter evaluation
 - Read-only workflow state aggregation for WebUI/remote management interaction flow
 - WebUI Phase 6 controls for recovery, workflow state, node revisions and vector backend evaluation
+- Optional PDF/DOCX document text loaders that feed Capture Proposal only
 
 ## Hard constraints
 
@@ -35,28 +39,35 @@ Phase 6 implementation is in progress after explicit user advancement.
 - Vector indexes remain rebuildable derived data and must not become the formal knowledge authority.
 - Vector backend probes may report optional dependency availability but must not create collections, write indexes or activate production retrieval.
 
-## Not authorized in current Phase 6 slice
+## Newly authorized implementation areas
 
-- ChromaDB / production vector index
-- Embedding provider network calls
-- production graph UI
-- PDF/DOCX/OCR
-- full Obsidian plugin
-- cloud sync
-- Redis / PostgreSQL / Neo4j
-- destructive restore over the active vault
-- automatic import/mount execution
+- Optional ChromaDB / production vector index adapters.
+- Embedding provider network calls behind explicit configuration.
+- Production graph API and UI surfaces.
+- PDF/DOCX/OCR import pipelines behind optional dependencies.
+- Obsidian integration and ExternalChange review loop.
+- Cloud sync and alternative storage backends when explicitly configured.
+- Import/mount execution and restore workflows with auditable safeguards.
 
 ## Phase advancement rule
 
-Only update this file after the user explicitly confirms advancement.
+Phase advancement is no longer the project limiter. Work should advance by
+auditable, tested capability slices.
 
 ## Next planned phase
 
-After this Phase 6 local vector adapter slice passes review:
+Immediate implementation focus:
 
 ```text
-Phase 6 continued - optional Chroma adapter design, still disabled by default
+1. production vector/embedding boundary
+2. graph API and UI
+3. executable snapshot import workflow
+4. document/OCR import extensions
+5. Obsidian/plugin/sync integrations
 ```
 
-Do not skip directly beyond Phase 6 without explicit confirmation.
+Initial PDF/DOCX text loaders are implemented as optional dependencies. OCR remains a future
+capability slice.
+
+Do not collapse CMCC, Ptilopsis and Rhine-Vault into one runtime. Rhine-Vault
+remains the audited long-term knowledge backend.

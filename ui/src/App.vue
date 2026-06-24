@@ -9,6 +9,7 @@ import {
   type ModelConfig,
   type RetrievalProfile,
   type WorkspaceDependency,
+  applyImportPlan,
   approveExternalChange,
   approveStaging,
   buildContextBundle,
@@ -20,11 +21,13 @@ import {
   defaultModels,
   dependencyUpgradeReport,
   detectExternalChanges,
+  documentImporters,
   emergencyReadonly,
   importDocument,
   listAuditEvents,
   listChangesets,
   listExternalChanges,
+  localGraph,
   listIndexChunks,
   listLibrarySnapshots,
   listNodeRevisions,
@@ -57,6 +60,7 @@ type Activity =
   | "retrieve"
   | "chat"
   | "nodes"
+  | "graph"
   | "review"
   | "mcp"
   | "library"
@@ -68,6 +72,7 @@ const tabs: { id: Activity; label: string; icon: GameIconName; description: stri
   { id: "retrieve", label: "检索实验台", icon: "search", description: "Context Bundle 与向量召回" },
   { id: "chat", label: "对话", icon: "chat", description: "模型问答与采集前对话" },
   { id: "nodes", label: "节点目录", icon: "nodes", description: "正式知识浏览入口" },
+  { id: "graph", label: "知识图谱", icon: "nodes", description: "节点关系与局部图谱" },
   { id: "review", label: "审核队列", icon: "review", description: "候选知识与审批流" },
   { id: "mcp", label: "MCP 边界", icon: "link", description: "受限工具与资源" },
   { id: "library", label: "Library", icon: "book", description: "索引、快照与依赖锁" },
@@ -133,7 +138,14 @@ const auditEvents = ref<ApiRecord[]>([]);
 const externalChanges = ref<ApiRecord[]>([]);
 const selectedExternalChangeId = ref("");
 const importPackagePath = ref("");
+const importTargetWorkspace = ref("");
+const importApprove = ref(false);
+const importOverwrite = ref(false);
 const recoveryState = ref<ApiRecord | null>(null);
+const graphNodeId = ref("");
+const graphDepth = ref(1);
+const graphLimit = ref(100);
+const graphState = ref<ApiRecord | null>(null);
 const vectorQuery = ref("approved chunk indexes");
 const vectorBackendState = ref<ApiRecord | null>(null);
 
@@ -209,6 +221,8 @@ async function openActivity(next: Activity): Promise<void> {
     await runVectorBackendProbe({silent: true});
   } else if (next === "nodes") {
     await perform("加载节点目录", refreshNodes, {silent: true, collapseOutput: true});
+  } else if (next === "graph") {
+    await runLocalGraph({silent: true});
   } else if (next === "review") {
     await perform(
       "加载审核队列",
@@ -333,6 +347,10 @@ async function runDocumentImport(): Promise<void> {
   }
   await refreshProposals();
   await openActivity("review");
+}
+
+async function runDocumentImporterProbe(): Promise<void> {
+  await perform("查看文档导入器", documentImporters);
 }
 
 async function runProjectScan(): Promise<void> {
@@ -501,8 +519,33 @@ async function runBuildImportPlan(): Promise<void> {
   );
 }
 
+async function runApplyImportPlan(): Promise<void> {
+  recoveryState.value = await perform("应用 Import Plan", () =>
+    applyImportPlan({
+      package_path: importPackagePath.value,
+      target_workspace_id: importTargetWorkspace.value || undefined,
+      approve: importApprove.value,
+      overwrite: importOverwrite.value,
+    }),
+  );
+  await Promise.all([refreshProposals(), refreshStaging(), refreshNodes()]);
+}
+
 async function runEmergencyReadonly(): Promise<void> {
   recoveryState.value = await perform("读取 Emergency Read-Only", emergencyReadonly);
+}
+
+async function runLocalGraph(options: {silent?: boolean} = {}): Promise<void> {
+  graphState.value = await perform(
+    "加载知识图谱",
+    () =>
+      localGraph({
+        node_id: graphNodeId.value || undefined,
+        depth: graphDepth.value,
+        limit: graphLimit.value,
+      }),
+    {silent: options.silent, collapseOutput: true},
+  );
 }
 
 async function runVectorSearch(): Promise<void> {
@@ -672,7 +715,7 @@ async function runDependencyUpgradeReport(): Promise<void> {
       <div class="brand">
         <div class="brand-mark">RV</div>
         <strong>Rhine-Vault</strong>
-        <small>Phase 6 · Vector & Recovery</small>
+        <small>Full Implementation</small>
       </div>
       <nav class="sidebar-nav">
         <el-button
@@ -705,7 +748,7 @@ async function runDependencyUpgradeReport(): Promise<void> {
         <div class="workspace-topbar-actions">
           <span class="notice-pill" :class="{ busy: Boolean(busyAction) }">{{ notice }}</span>
           <span class="connection-pill online">Core API</span>
-          <span class="uptime-pill">Phase 6</span>
+          <span class="uptime-pill">Full Mode</span>
           <el-button
             class="topbar-icon-button"
             text
@@ -788,10 +831,11 @@ async function runDependencyUpgradeReport(): Promise<void> {
             <el-card shadow="never">
               <template #header>导入入口</template>
               <el-form label-position="top">
-                <el-form-item label="Markdown / TXT 文件路径">
-                  <el-input v-model="documentPath" placeholder="E:\\Project\\docs\\note.md" />
+                <el-form-item label="Markdown / TXT / PDF / DOCX 文件路径">
+                  <el-input v-model="documentPath" placeholder="E:\\Project\\docs\\note.pdf" />
                 </el-form-item>
                 <el-button :loading="busyAction === '导入文档'" @click="runDocumentImport">导入文档</el-button>
+                <el-button @click="runDocumentImporterProbe">查看导入器</el-button>
                 <el-divider />
                 <el-form-item label="项目目录">
                   <el-input v-model="projectRoot" placeholder="E:\\Project\\SomeProject" />
@@ -1195,6 +1239,35 @@ async function runDependencyUpgradeReport(): Promise<void> {
           </div>
         </section>
 
+        <section v-if="activity === 'graph'" class="work-panel">
+          <h2>知识图谱</h2>
+          <el-card shadow="never">
+            <template #header>局部图谱</template>
+            <el-form label-position="top">
+              <el-form-item label="中心节点 ID">
+                <el-input v-model="graphNodeId" placeholder="留空则加载节点概览" />
+              </el-form-item>
+              <el-row :gutter="12">
+                <el-col :span="12">
+                  <el-form-item label="关系深度">
+                    <el-input-number v-model="graphDepth" :min="0" :max="4" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="节点上限">
+                    <el-input-number v-model="graphLimit" :min="1" :max="300" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-button type="primary" @click="runLocalGraph()">加载图谱</el-button>
+            </el-form>
+          </el-card>
+          <el-card v-if="graphState" shadow="never">
+            <template #header>图谱数据</template>
+            <pre>{{ JSON.stringify(graphState, null, 2) }}</pre>
+          </el-card>
+        </section>
+
         <section v-if="activity === 'review'" class="work-panel">
           <h2>审核与工作流</h2>
           <el-tabs>
@@ -1289,7 +1362,15 @@ async function runDependencyUpgradeReport(): Promise<void> {
                 <el-form-item label=".rhine package path">
                   <el-input v-model="importPackagePath" />
                 </el-form-item>
+                <el-form-item label="导入目标 Workspace">
+                  <el-input v-model="importTargetWorkspace" placeholder="留空则使用包内 Workspace" />
+                </el-form-item>
+                <el-form-item>
+                  <el-checkbox v-model="importApprove">导入后立即审批</el-checkbox>
+                  <el-checkbox v-model="importOverwrite">允许覆盖同 ID 节点</el-checkbox>
+                </el-form-item>
                 <el-button @click="runBuildImportPlan">只读验证 Import Plan</el-button>
+                <el-button type="primary" @click="runApplyImportPlan">应用 Import Plan</el-button>
               </el-form>
             </el-card>
             <el-card shadow="never">

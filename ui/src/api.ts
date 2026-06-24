@@ -130,6 +130,10 @@ export function importDocument(path: string): Promise<ApiRecord> {
   return postJson("/api/documents/import", {workspace_id: workspaceId, path});
 }
 
+export function documentImporters(): Promise<ApiRecord> {
+  return getJson("/api/documents/importers");
+}
+
 export function scanProject(root: string): Promise<ApiRecord> {
   return postJson("/api/projects/scan", {workspace_id: workspaceId, root});
 }
@@ -223,8 +227,33 @@ export function buildImportPlan(packagePath: string): Promise<ApiRecord> {
   return postJson("/api/recovery/import-plan", {package_path: packagePath});
 }
 
+export function applyImportPlan(body: {
+  package_path: string;
+  target_workspace_id?: string;
+  approve: boolean;
+  overwrite: boolean;
+}): Promise<ApiRecord> {
+  return postJson("/api/recovery/import-apply", body);
+}
+
 export function emergencyReadonly(): Promise<ApiRecord> {
   return getJson(`/api/recovery/emergency-readonly?workspace_id=${workspaceId}`);
+}
+
+export function localGraph(body: {
+  node_id?: string;
+  depth: number;
+  limit: number;
+}): Promise<ApiRecord> {
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    depth: String(body.depth),
+    limit: String(body.limit)
+  });
+  if (body.node_id) {
+    params.set("node_id", body.node_id);
+  }
+  return getJson(`/api/graph/local?${params.toString()}`);
 }
 
 export function vectorSearch(body: { query: string; result_limit: number }): Promise<ApiRecord> {

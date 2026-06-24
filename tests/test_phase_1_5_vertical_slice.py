@@ -905,7 +905,7 @@ def test_fastapi_endpoints_and_api_docs(tmp_path: Path, monkeypatch: pytest.Monk
     en_catalog = client.get("/api/i18n?locale=en-US").json()
     fallback_catalog = client.get("/api/i18n?locale=fr").json()
     assert zh_catalog["locale"] == "zh"
-    assert zh_catalog["messages"]["app.title"] == "Rhine-Vault Phase 6"
+    assert zh_catalog["messages"]["app.title"] == "Rhine-Vault Full Implementation"
     assert zh_catalog["messages"]["manual.title"] == "手动节点编辑"
     assert zh_catalog["messages"]["search.title"] == "Retrieval Lab"
     assert zh_catalog["messages"]["retrieval.run"] == "运行 Retrieval Lab"

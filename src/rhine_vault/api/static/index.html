@@ -200,7 +200,7 @@
 </head>
 <body>
   <header>
-    <strong data-i18n="app.title">Rhine-Vault Phase 6</strong>
+    <strong data-i18n="app.title">Rhine-Vault Full Implementation</strong>
     <div class="header-actions">
       <span id="status-pill" class="status-pill">Ready</span>
       <label class="locale-control">
@@ -221,6 +221,7 @@
       <button onclick="show('review')" data-i18n="nav.review">候选知识审核</button>
       <button onclick="show('workflow')" data-i18n="nav.workflow">正式工作流状态</button>
       <button onclick="show('nodes')" data-i18n="nodes.title">节点目录</button>
+      <button onclick="show('graph')" data-i18n="nav.graph">知识图谱</button>
       <button onclick="show('search')" data-i18n="nav.search">搜索实验台</button>
       <button onclick="show('retrieval')" data-i18n="activity.retrieve">检索实验台</button>
       <button onclick="show('context')" data-i18n="nav.context">Context Bundle</button>
@@ -262,6 +263,7 @@
         <h2 data-i18n="document.title">文档导入</h2>
         <input id="document-path" data-i18n-placeholder="document.path.placeholder" placeholder="Markdown/TXT 文件路径">
         <button class="action" onclick="documentImport()" data-i18n="document.import">导入</button>
+        <button onclick="loadDocumentImporters()" data-i18n="document.importers">查看导入器</button>
       </section>
       <section id="project">
         <h2 data-i18n="project.title">项目导入</h2>
@@ -426,6 +428,23 @@
         <button class="action" onclick="rollbackNode()" data-i18n="nodes.rollback">生成回滚 revision</button>
         <pre id="node-details">Node details will appear here.</pre>
       </section>
+      <section id="graph">
+        <h2 data-i18n="graph.title">知识图谱</h2>
+        <div class="inline-row">
+          <label>
+            <span class="field-label" data-i18n="graph.node_id">中心节点 ID</span>
+            <input id="graph-node-id" placeholder="留空则加载节点概览">
+          </label>
+          <label>
+            <span class="field-label" data-i18n="graph.depth">关系深度</span>
+            <input id="graph-depth" type="number" min="0" max="4" value="1">
+          </label>
+        </div>
+        <label class="field-label" for="graph-limit" data-i18n="graph.limit">节点上限</label>
+        <input id="graph-limit" type="number" min="1" max="300" value="100">
+        <button class="action" onclick="loadGraph()" data-i18n="graph.load">加载图谱</button>
+        <pre id="graph-output">Graph payload will appear here.</pre>
+      </section>
       <section id="recovery">
         <h2 data-i18n="recovery.title">恢复与迁移</h2>
         <div class="panel-card">
@@ -437,6 +456,17 @@
           <label class="field-label" for="recovery-package-path" data-i18n="recovery.package_path">.rhine package path</label>
           <input id="recovery-package-path" placeholder="E:\Project\Python\Rhine-Vault\.rhine\snapshots\...rhine">
           <button onclick="buildImportPlan()" data-i18n="recovery.import_plan.build">只读验证 Import Plan</button>
+          <label class="field-label" for="recovery-target-workspace" data-i18n="recovery.target_workspace">导入目标 Workspace</label>
+          <input id="recovery-target-workspace" placeholder="留空则使用包内 Workspace">
+          <label class="field-label">
+            <input id="recovery-import-approve" type="checkbox">
+            <span data-i18n="recovery.import_approve">导入后立即审批</span>
+          </label>
+          <label class="field-label">
+            <input id="recovery-import-overwrite" type="checkbox">
+            <span data-i18n="recovery.import_overwrite">允许覆盖同 ID 节点</span>
+          </label>
+          <button class="action" onclick="applyImportPlan()" data-i18n="recovery.import_apply">应用 Import Plan</button>
         </div>
         <div class="panel-card">
           <h3 data-i18n="recovery.emergency.title">Emergency Read-Only</h3>
@@ -552,6 +582,8 @@
         void loadWorkflowState({silent: true});
       } else if (id === "nodes") {
         void loadNodes({silent: true});
+      } else if (id === "graph") {
+        void loadGraph({silent: true});
       } else if (id === "retrieval") {
         void loadVectorBackends({silent: true});
       } else if (id === "mcp") {
@@ -670,6 +702,9 @@
     async function documentImport() {
       await post("/api/documents/import", {workspace_id, path: val("document-path")});
       show("review");
+    }
+    async function loadDocumentImporters() {
+      await request("/api/documents/importers");
     }
     async function projectScan() {
       await post("/api/projects/scan", {workspace_id, root: val("project-root")});
@@ -932,6 +967,23 @@
       await loadNodes({silent: true, skipRevisions: true});
       await loadWorkflowState({silent: true});
     }
+    async function loadGraph(options = {}) {
+      const params = new URLSearchParams({
+        workspace_id,
+        depth: String(Number(val("graph-depth") || 1)),
+        limit: String(Number(val("graph-limit") || 100))
+      });
+      const nodeId = val("graph-node-id").trim();
+      if (nodeId) {
+        params.set("node_id", nodeId);
+      }
+      const payload = await request(`/api/graph/local?${params.toString()}`);
+      document.getElementById("graph-output").textContent = JSON.stringify(payload, null, 2);
+      if (options.silent) {
+        setStatus("Ready");
+      }
+      return payload;
+    }
     async function createWorkspaceSnapshot() {
       const payload = await post("/api/recovery/snapshots/workspace", {workspace_id});
       if (payload && payload.package_path) {
@@ -940,6 +992,17 @@
     }
     async function buildImportPlan() {
       await post("/api/recovery/import-plan", {package_path: val("recovery-package-path")});
+    }
+    async function applyImportPlan() {
+      const payload = await post("/api/recovery/import-apply", {
+        package_path: val("recovery-package-path"),
+        target_workspace_id: val("recovery-target-workspace") || null,
+        approve: document.getElementById("recovery-import-approve").checked,
+        overwrite: document.getElementById("recovery-import-overwrite").checked
+      });
+      if (payload && payload.proposal) {
+        await loadReviewState({silent: true});
+      }
     }
     async function emergencyReadonly() {
       await request(`/api/recovery/emergency-readonly?workspace_id=${workspace_id}`);

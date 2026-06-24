@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import urllib.request
 from pathlib import Path
+from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
@@ -8,7 +11,7 @@ from rhine_vault.api import create_app
 from rhine_vault.capture.service import CaptureService
 from rhine_vault.retrieval import RetrievalOverrides, retrieve_lab
 from rhine_vault.storage.sqlite import SQLiteStore
-from rhine_vault.vector import search_index_chunks
+from rhine_vault.vector import OpenAICompatibleEmbeddingProvider, search_index_chunks
 from rhine_vault.vector_backends import vector_backend_capabilities
 
 
@@ -107,7 +110,49 @@ def test_phase_6_vector_backend_capabilities_do_not_activate_chroma() -> None:
     assert backends["local-hash"]["formal_authority"] is False
     assert backends["chroma"]["enabled"] is False
     assert backends["chroma"]["production_ready"] is False
-    assert "ChromaDB is evaluated" in " ".join(capabilities["constraints"])
+    assert capabilities["phase"] == "Full Implementation - Vector Backends"
+    assert capabilities["embedding_provider"]["provider"] == "openai-compatible-embeddings"
+    assert "Formal MemoryNode approval" in " ".join(capabilities["constraints"])
+
+
+def test_full_mode_openai_compatible_embedding_provider_posts_expected_payload(
+    monkeypatch: Any,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps({"data": [{"index": 0, "embedding": [0.1, 0.2]}]}).encode()
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        captured["body"] = json.loads(cast(bytes, request.data or b"").decode("utf-8"))
+        captured["authorization"] = request.headers.get("Authorization")
+        return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    provider = OpenAICompatibleEmbeddingProvider(
+        base_url="https://api.example.com",
+        api_key="secret",
+        model="embed-demo",
+        timeout_seconds=3.0,
+    )
+
+    vectors = provider.embed_texts(["hello"])
+
+    assert provider.embeddings_url == "https://api.example.com/v1/embeddings"
+    assert captured["url"] == provider.embeddings_url
+    assert captured["timeout"] == 3.0
+    assert captured["authorization"] == "Bearer secret"
+    assert captured["body"] == {"model": "embed-demo", "input": ["hello"]}
+    assert vectors == [[0.1, 0.2]]
 
 
 def test_phase_6_fastapi_vector_search_and_retrieval_toggle(tmp_path: Path) -> None:
@@ -178,6 +223,7 @@ def test_phase_6_element_ui_exposes_full_management_surfaces() -> None:
     for activity in (
         "activity === 'capture'",
         "activity === 'nodes'",
+        "activity === 'graph'",
         "activity === 'review'",
         "activity === 'recovery'",
     ):
@@ -188,14 +234,17 @@ def test_phase_6_element_ui_exposes_full_management_surfaces() -> None:
         "perform",
         "submitManualProposal",
         "submitAndStageManualProposal",
+        "runDocumentImporterProbe",
         "captureChatAsProposal",
         "runStageProposal",
         "runApproveStaging",
         "refreshNodes",
         "selectNode",
         "runRollbackNode",
+        "runLocalGraph",
         "runCreateWorkspaceSnapshot",
         "runBuildImportPlan",
+        "runApplyImportPlan",
         "runEmergencyReadonly",
         "runVectorBackendProbe",
         "runStateCollapsed",
@@ -207,10 +256,13 @@ def test_phase_6_element_ui_exposes_full_management_surfaces() -> None:
     for api_helper in (
         "captureConversation",
         "createManualProposal",
+        "documentImporters",
         "listNodes",
+        "localGraph",
         "approveStaging",
         "createWorkspaceSnapshot",
         "buildImportPlan",
+        "applyImportPlan",
         "emergencyReadonly",
         "vectorBackends",
     ):

@@ -14,6 +14,11 @@ from pydantic import BaseModel, Field, field_validator
 from rhine_vault import __version__
 from rhine_vault.capture.service import CaptureService
 from rhine_vault.context import build_context_bundle
+from rhine_vault.document_loaders import (
+    OptionalDocumentDependencyError,
+    document_loader_capabilities,
+)
+from rhine_vault.graph import local_graph_payload
 from rhine_vault.i18n import (
     DEFAULT_LOCALE,
     SUPPORTED_LOCALES,
@@ -24,6 +29,7 @@ from rhine_vault.llm import FakeLLMProvider, OpenAICompatibleProvider
 from rhine_vault.mcp_bridge import MCPBridge
 from rhine_vault.node_types import node_type_config
 from rhine_vault.recovery import (
+    apply_import_plan,
     build_import_plan,
     create_workspace_snapshot,
     emergency_readonly_nodes,
@@ -199,6 +205,13 @@ class ImportPlanRequest(BaseModel):
         return cleaned
 
 
+class ImportApplyRequest(ImportPlanRequest):
+    target_workspace_id: str | None = None
+    approve: bool = False
+    overwrite: bool = False
+    actor_id: str = "user:local"
+
+
 class QueryRequest(BaseModel):
     workspace_id: str
     query: str
@@ -259,7 +272,7 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
     store = SQLiteStore(db_path)
     capture = CaptureService(store)
     mcp_bridge = MCPBridge(store=store, capture=capture)
-    app = FastAPI(title="Rhine-Vault Phase 6")
+    app = FastAPI(title="Rhine-Vault Full Implementation")
     app.state.store = store
     app.state.capture = capture
     app.state.mcp_bridge = mcp_bridge
@@ -294,7 +307,7 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
         return {
             "status": "ok",
             "version": __version__,
-            "phase": "Phase 6",
+            "phase": "Full Implementation",
             "database_path": str(store.database_path),
             "vault_root": str(store.vault_root),
             "ui": {
@@ -447,8 +460,12 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
                     expected_kind="file",
                 ),
             )
-        except ValueError as exc:
+        except (OptionalDocumentDependencyError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/documents/importers")
+    def document_importers() -> dict[str, Any]:
+        return document_loader_capabilities()
 
     @app.post("/api/projects/scan")
     def project_scan(request: ProjectScanRequest) -> dict[str, Any]:
@@ -495,6 +512,24 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
     @app.get("/api/nodes")
     def nodes(workspace_id: str) -> list[dict[str, Any]]:
         return store.list_memory_nodes(workspace_id=workspace_id)
+
+    @app.get("/api/graph/local")
+    def local_graph(
+        workspace_id: str,
+        node_id: str | None = None,
+        depth: int = 1,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        try:
+            return local_graph_payload(
+                nodes=store.list_memory_nodes(workspace_id=workspace_id),
+                workspace_id=workspace_id,
+                node_id=node_id or None,
+                depth=min(max(depth, 0), 4),
+                limit=min(max(limit, 1), 300),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/changesets")
     def changesets(workspace_id: str) -> list[dict[str, Any]]:
@@ -656,6 +691,24 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
                     store=store,
                     expected_kind="file",
                 )
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/recovery/import-apply")
+    def recovery_import_apply(request: ImportApplyRequest) -> dict[str, Any]:
+        try:
+            return apply_import_plan(
+                store=store,
+                package_path=_resolve_allowed_local_path(
+                    request.package_path,
+                    store=store,
+                    expected_kind="file",
+                ),
+                target_workspace_id=request.target_workspace_id,
+                approve=request.approve,
+                overwrite=request.overwrite,
+                actor_id=request.actor_id,
             )
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

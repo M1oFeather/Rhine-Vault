@@ -68,7 +68,7 @@ def test_fastapi_health_reports_usable_runtime_state(
 
     assert health["status"] == "ok"
     assert health["version"] == "0.1.0"
-    assert health["phase"] == "Phase 6"
+    assert health["phase"] == "Full Implementation"
     assert health["database_path"] == str(tmp_path / ".rhine" / "rhine-vault.db")
     assert health["vault_root"] == str(tmp_path)
     assert health["ui"]["webui_available"] is True
@@ -87,6 +87,8 @@ def test_default_install_is_core_only() -> None:
     assert "uvicorn>=0.38,<1" in optional_dependencies["api"]
     assert optional_dependencies["webui"] == optional_dependencies["api"]
     assert optional_dependencies["desktop"] == optional_dependencies["api"]
+    assert "pypdf>=6,<7" in optional_dependencies["documents"]
+    assert "python-docx>=1.1,<2" in optional_dependencies["documents"]
 
 
 def test_api_can_resolve_external_ui_dist(
