@@ -59,6 +59,7 @@ nav:
       - First Usable Version: implementation/FIRST_USABLE_VERSION.md
       - UI Panel Migration: implementation/UI_PANEL_MIGRATION.md
       - WebUI Plugin Concepts: implementation/WEBUI_PLUGIN_CONCEPTS.md
+      - Novel Studio Plugin: implementation/NOVEL_STUDIO_PLUGIN.md
       - CMCC Rhine Integration: implementation/CMCC_RHINE_INTEGRATION_PLAN.md
       - Consistency Check: implementation/CONSISTENCY_CHECK.md
       - Project Style Standard: implementation/PROJECT_STYLE_STANDARD_TEMPLATE.md

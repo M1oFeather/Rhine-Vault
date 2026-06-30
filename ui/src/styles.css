@@ -256,6 +256,10 @@ body {
   gap: 8px;
 }
 
+.workspace-select {
+  width: min(320px, 28vw);
+}
+
 .connection-pill,
 .uptime-pill,
 .notice-pill {
@@ -354,6 +358,76 @@ body {
   font-size: 20px;
 }
 
+.section-heading,
+.card-header-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-heading p,
+.card-header-line small {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.overview-strip {
+  width: min(1180px, 100%);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(128px, 1fr)) minmax(220px, 1.4fr);
+  gap: 10px;
+}
+
+.stat-card {
+  display: grid;
+  min-height: 70px;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 10px 12px;
+}
+
+.stat-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stat-card strong {
+  overflow: hidden;
+  font-size: 22px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-card.blue {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: #f8fbff;
+}
+
+.stat-card.amber {
+  border-color: rgba(217, 119, 6, 0.2);
+  background: #fffaf2;
+}
+
+.stat-card.green {
+  border-color: rgba(19, 163, 107, 0.18);
+  background: #f5fcf9;
+}
+
+.stat-card.red {
+  border-color: rgba(211, 59, 50, 0.16);
+  background: #fff7f7;
+}
+
+.stat-card.wide strong {
+  font-size: 16px;
+}
+
 .work-panel > form,
 .work-panel > .el-form,
 .mcp-panel,
@@ -430,12 +504,71 @@ body {
   color: rgba(255, 255, 255, 0.78);
 }
 
+.chat-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
 .composer {
   margin-top: 0;
 }
 
+.novel-panel {
+  width: min(1280px, 100%);
+}
+
+.novel-grid,
+.novel-check-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.novel-output pre,
+.novel-check-grid pre {
+  max-height: 520px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0f172a;
+  color: #e5edf7;
+  padding: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.novel-tabs {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+}
+
+.issue-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  padding: 9px;
+  line-height: 1.55;
+}
+
+.issue-row span:last-child {
+  overflow-wrap: anywhere;
+}
+
 .phase5-table {
   margin-top: 14px;
+}
+
+.seed-actions {
+  margin: 12px 0 2px;
 }
 
 .panel-grid {
@@ -449,6 +582,68 @@ body {
   grid-template-columns: minmax(420px, 1.1fr) minmax(360px, 0.9fr);
   gap: 14px;
   min-width: 0;
+}
+
+.graph-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.graph-canvas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-content: start;
+  gap: 10px;
+  min-height: 280px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(#eef3f8 1px, transparent 1px),
+    linear-gradient(90deg, #eef3f8 1px, transparent 1px),
+    #fbfdff;
+  background-size: 22px 22px;
+  padding: 12px;
+}
+
+.graph-node {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.06);
+  padding: 10px;
+  cursor: pointer;
+}
+
+.graph-node.selected,
+.graph-node:hover {
+  border-color: rgba(37, 99, 235, 0.48);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.graph-node strong,
+.graph-node span,
+.graph-node small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-node span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-edge-table {
+  min-width: 0;
+}
+
+.raw-collapse {
+  margin-top: 12px;
 }
 
 .detail-card,
@@ -576,8 +771,13 @@ body {
 
   .workspace-title-group small,
   .connection-pill,
-  .notice-pill {
+  .notice-pill,
+  .uptime-pill {
     display: none;
+  }
+
+  .workspace-select {
+    width: min(230px, 52vw);
   }
 
   .main-panel {
@@ -585,7 +785,11 @@ body {
   }
 
   .node-layout,
-  .review-grid {
+  .review-grid,
+  .graph-layout,
+  .novel-grid,
+  .novel-check-grid,
+  .overview-strip {
     grid-template-columns: 1fr;
   }
 }

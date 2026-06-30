@@ -17,6 +17,13 @@ export type ModelConfig = {
   reasoningEffort?: string;
 };
 
+export type NodeTypeOption = {
+  id: string;
+  display_name: string;
+  description?: string;
+  category?: string;
+};
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -63,9 +70,26 @@ export type WorkspaceDependency = {
   status: string;
 };
 
+export type WorkspaceRecord = {
+  workspace_id: string;
+  workspace_type: "project" | "library";
+  display_name: string;
+  root_path?: string;
+  vault_root?: string;
+};
+
 export type ApiRecord = Record<string, any>;
 
-export const workspaceId = "demo-workspace";
+export let workspaceId = localStorage.getItem("rhine-vault-workspace-id") || "demo-workspace";
+
+export function getWorkspaceId(): string {
+  return workspaceId;
+}
+
+export function setWorkspaceId(nextWorkspaceId: string): void {
+  workspaceId = nextWorkspaceId;
+  localStorage.setItem("rhine-vault-workspace-id", nextWorkspaceId);
+}
 
 export async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
@@ -80,7 +104,7 @@ export async function postJson<T>(url: string, body: unknown, signal?: AbortSign
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(body),
-    signal
+    signal,
   });
   if (!response.ok) {
     throw new Error(await response.text());
@@ -134,6 +158,86 @@ export function documentImporters(): Promise<ApiRecord> {
   return getJson("/api/documents/importers");
 }
 
+export function listNodeTypes(locale = "zh"): Promise<{
+  default_locale: string;
+  locale: string;
+  extension_policy: Record<string, unknown>;
+  node_types: NodeTypeOption[];
+}> {
+  return getJson(`/api/node-types?locale=${encodeURIComponent(locale)}`);
+}
+
+export function listWorkspaces(): Promise<WorkspaceRecord[]> {
+  return getJson("/api/workspaces");
+}
+
+export function registerWorkspace(body: {
+  workspace_id: string;
+  workspace_type: "project" | "library";
+  display_name?: string;
+}): Promise<WorkspaceRecord> {
+  return postJson("/api/workspaces", body);
+}
+
+export function importPtilopsisSeed(body: {
+  workspace_id?: string;
+  display_name?: string;
+  stage: boolean;
+  approve: boolean;
+}): Promise<ApiRecord> {
+  return postJson("/api/seeds/ptilopsis", body);
+}
+
+export function createNovelArtifact(body: {
+  artifact_type: string;
+  title: string;
+  content: string;
+  tags: string[];
+  fields?: Record<string, unknown>;
+}): Promise<ApiRecord> {
+  return postJson("/api/novel/artifacts", {workspace_id: workspaceId, ...body});
+}
+
+export function generateNovelChapter(body: {
+  query: string;
+  project_title: string;
+  chapter_title: string;
+  chapter_number: number;
+  outline: string;
+  pov_character: string;
+  tone: string;
+  target_words: number;
+  extra_constraints: string[];
+  save_as_proposal: boolean;
+}): Promise<ApiRecord> {
+  return postJson("/api/novel/chapter/generate", {workspace_id: workspaceId, ...body});
+}
+
+export function checkNovelConsistency(body: {
+  query: string;
+  manuscript: string;
+  strictness: string;
+}): Promise<ApiRecord> {
+  return postJson("/api/novel/consistency/check", {workspace_id: workspaceId, ...body});
+}
+
+export function reviewNovelForeshadowing(body: {
+  query: string;
+  manuscript: string;
+  planned_payoffs: string[];
+}): Promise<ApiRecord> {
+  return postJson("/api/novel/foreshadowing/review", {workspace_id: workspaceId, ...body});
+}
+
+export function extractNovelChapterKnowledge(body: {
+  chapter_title: string;
+  chapter_text: string;
+  tags: string[];
+  stage: boolean;
+}): Promise<ApiRecord> {
+  return postJson("/api/novel/chapter/extract", {workspace_id: workspaceId, ...body});
+}
+
 export function scanProject(root: string): Promise<ApiRecord> {
   return postJson("/api/projects/scan", {workspace_id: workspaceId, root});
 }
@@ -145,8 +249,8 @@ export function captureConversation(messages: ChatMessage[]): Promise<ApiRecord>
     messages: messages.map((message, index) => ({
       message_id: `message-${Date.now()}-${index + 1}`,
       role: message.role,
-      content: message.content
-    }))
+      content: message.content,
+    })),
   });
 }
 
@@ -157,7 +261,7 @@ export function listProposals(): Promise<ApiRecord[]> {
 export function stageProposal(proposalId: string, temporaryIds: string[]): Promise<ApiRecord[]> {
   return postJson(`/api/proposals/${proposalId}/stage`, {
     workspace_id: workspaceId,
-    temporary_ids: temporaryIds
+    temporary_ids: temporaryIds,
   });
 }
 
@@ -172,7 +276,7 @@ export function listStaging(status = "pending"): Promise<ApiRecord[]> {
 export function approveStaging(entryIds: string[]): Promise<ApiRecord[]> {
   return postJson("/api/staging/approve", {
     workspace_id: workspaceId,
-    entry_ids: entryIds
+    entry_ids: entryIds,
   });
 }
 
@@ -187,7 +291,7 @@ export function listNodeRevisions(nodeId: string): Promise<ApiRecord[]> {
 export function rollbackNode(nodeId: string, revision: number): Promise<ApiRecord> {
   return postJson(`/api/nodes/${encodeURIComponent(nodeId)}/rollback`, {
     workspace_id: workspaceId,
-    revision
+    revision,
   });
 }
 
@@ -209,13 +313,13 @@ export function listExternalChanges(): Promise<ApiRecord[]> {
 
 export function approveExternalChange(changeId: string): Promise<ApiRecord> {
   return postJson(`/api/external-changes/${encodeURIComponent(changeId)}/approve`, {
-    workspace_id: workspaceId
+    workspace_id: workspaceId,
   });
 }
 
 export function rejectExternalChange(changeId: string): Promise<ApiRecord> {
   return postJson(`/api/external-changes/${encodeURIComponent(changeId)}/reject`, {
-    workspace_id: workspaceId
+    workspace_id: workspaceId,
   });
 }
 
@@ -248,7 +352,7 @@ export function localGraph(body: {
   const params = new URLSearchParams({
     workspace_id: workspaceId,
     depth: String(body.depth),
-    limit: String(body.limit)
+    limit: String(body.limit),
   });
   if (body.node_id) {
     params.set("node_id", body.node_id);
@@ -256,7 +360,7 @@ export function localGraph(body: {
   return getJson(`/api/graph/local?${params.toString()}`);
 }
 
-export function vectorSearch(body: { query: string; result_limit: number }): Promise<ApiRecord> {
+export function vectorSearch(body: {query: string; result_limit: number}): Promise<ApiRecord> {
   return postJson("/api/vector/search", {workspace_id: workspaceId, ...body});
 }
 
@@ -270,7 +374,7 @@ export function mcpCapabilities(): Promise<McpCapabilities> {
 
 export function callMcpTool(
   toolName: string,
-  argumentsJson: Record<string, unknown>
+  argumentsJson: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   return postJson(`/api/mcp/tools/${toolName}`, {arguments: argumentsJson});
 }
@@ -300,7 +404,7 @@ export function publishLibrarySnapshot(body: {
   return postJson(`/api/libraries/${body.workspace_id}/snapshots`, {
     version: body.version,
     git_tag: body.git_tag || undefined,
-    commit_hash: body.commit_hash || undefined
+    commit_hash: body.commit_hash || undefined,
   });
 }
 
@@ -319,29 +423,29 @@ export function lockWorkspaceDependency(body: {
     alias: body.alias,
     library_workspace_id: body.library_workspace_id,
     version: body.version,
-    version_requirement: body.version_requirement || undefined
+    version_requirement: body.version_requirement || undefined,
   });
 }
 
 export function listWorkspaceDependencies(
-  project_workspace_id: string
+  project_workspace_id: string,
 ): Promise<WorkspaceDependency[]> {
   return getJson(`/api/workspaces/${encodeURIComponent(project_workspace_id)}/dependencies`);
 }
 
 export function dependencyUpgradeReport(
   project_workspace_id: string,
-  alias: string
+  alias: string,
 ): Promise<Record<string, unknown>> {
   return getJson(
-    `/api/workspaces/${encodeURIComponent(project_workspace_id)}/dependencies/${encodeURIComponent(alias)}/upgrade-report`
+    `/api/workspaces/${encodeURIComponent(project_workspace_id)}/dependencies/${encodeURIComponent(alias)}/upgrade-report`,
   );
 }
 
 export function sendChatMessage(
   model: ModelConfig,
   messages: ChatMessage[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   if (model.provider === "fake") {
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
@@ -349,9 +453,9 @@ export function sendChatMessage(
       "/api/llm/fake",
       {
         workspace_id: workspaceId,
-        query: lastUserMessage?.content ?? ""
+        query: lastUserMessage?.content ?? "",
       },
-      signal
+      signal,
     );
   }
   return postJson(
@@ -363,9 +467,9 @@ export function sendChatMessage(
       api_key: model.apiKey || undefined,
       messages,
       thinking_enabled: Boolean(model.thinkingEnabled),
-      reasoning_effort: model.reasoningEffort || undefined
+      reasoning_effort: model.reasoningEffort || undefined,
     },
-    signal
+    signal,
   );
 }
 
@@ -377,7 +481,7 @@ export function defaultModels(): ModelConfig[] {
       provider: "fake",
       providerKind: "fake",
       baseUrl: "",
-      model: "fake"
+      model: "fake",
     },
     {
       id: "deepseek-v4-flash",
@@ -385,7 +489,7 @@ export function defaultModels(): ModelConfig[] {
       provider: "openai-compatible",
       providerKind: "deepseek",
       baseUrl: "https://api.deepseek.com",
-      model: "deepseek-v4-flash"
+      model: "deepseek-v4-flash",
     },
     {
       id: "deepseek-v4-pro",
@@ -395,7 +499,7 @@ export function defaultModels(): ModelConfig[] {
       baseUrl: "https://api.deepseek.com",
       model: "deepseek-v4-pro",
       thinkingEnabled: true,
-      reasoningEffort: "high"
-    }
+      reasoningEffort: "high",
+    },
   ];
 }

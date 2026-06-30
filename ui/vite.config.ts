@@ -10,6 +10,21 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("@element-plus/icons-vue")) {
+            return "vendor-element-icons";
+          }
+          if (id.includes("node_modules/element-plus")) {
+            return "vendor-element";
+          }
+          if (id.includes("node_modules")) {
+            return "vendor";
+          }
+        },
+      },
+    },
   }
 });

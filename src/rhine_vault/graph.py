@@ -47,13 +47,13 @@ def graph_edges(nodes: list[dict[str, Any]]) -> list[dict[str, str]]:
         for relation in node.get("relations", []):
             if not isinstance(relation, dict):
                 continue
-            target = str(relation.get("target", ""))
+            target = str(relation.get("target") or relation.get("target_node_id") or "")
             if target in node_ids:
                 edges.append(
                     {
                         "source": source,
                         "target": target,
-                        "type": str(relation.get("type", "")),
+                        "type": str(relation.get("type") or relation.get("relation_type") or ""),
                         "description": str(relation.get("description", "")),
                     }
                 )

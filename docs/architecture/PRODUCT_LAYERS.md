@@ -108,3 +108,29 @@ Plugins should target the lowest layer that can support them:
 
 This keeps Core lightweight while allowing WebUI and Desktop to become rich product surfaces.
 
+## Novel Studio Plugin
+
+Novel generation and writing management should start as a Rhine-Vault WebUI plugin, not as
+Core behavior and not as a separate repository by default.
+
+Responsibilities:
+
+- worldbuilding libraries;
+- character cards and relationship maps;
+- factions, locations, items and rules;
+- outline and timeline management;
+- chapter planning and draft generation;
+- consistency checks against approved knowledge;
+- foreshadowing and callback tracking;
+- chapter-to-knowledge extraction that produces Capture Proposals or staging candidates.
+
+Novel Studio may add WebUI-specific Python orchestration when generation, consistency checks or
+document projection need server-side support. Formal knowledge still enters Rhine-Vault through
+Capture Proposal, staging and human approval.
+
+Desktop may extend Novel Studio with richer local file operations, a longer-form editor, project
+tree management, local preview and export tools.
+
+Novel Studio can become a separate product later only if it grows beyond a Rhine-Vault plugin into
+an independent writing application. Even then, Rhine-Vault should remain the audited knowledge
+backend rather than duplicating formal knowledge storage.

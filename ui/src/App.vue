@@ -7,15 +7,19 @@ import {
   type LibrarySnapshot,
   type McpCapabilities,
   type ModelConfig,
+  type NodeTypeOption,
   type RetrievalProfile,
+  type WorkspaceRecord,
   type WorkspaceDependency,
   applyImportPlan,
   approveExternalChange,
   approveStaging,
   buildContextBundle,
+  checkNovelConsistency,
   buildImportPlan,
   callMcpTool,
   captureConversation,
+  createNovelArtifact,
   createManualProposal,
   createWorkspaceSnapshot,
   defaultModels,
@@ -23,17 +27,23 @@ import {
   detectExternalChanges,
   documentImporters,
   emergencyReadonly,
+  extractNovelChapterKnowledge,
+  generateNovelChapter,
+  getWorkspaceId,
   importDocument,
+  importPtilopsisSeed,
   listAuditEvents,
   listChangesets,
   listExternalChanges,
   localGraph,
   listIndexChunks,
   listLibrarySnapshots,
+  listNodeTypes,
   listNodeRevisions,
   listNodes,
   listProposals,
   listStaging,
+  listWorkspaces,
   listWorkspaceDependencies,
   lockWorkspaceDependency,
   mcpCapabilities,
@@ -41,13 +51,16 @@ import {
   publishLibrarySnapshot,
   readMcpResource,
   rebuildIndexJobs,
+  registerWorkspace,
   rejectExternalChange,
   rejectProposal,
   retrievalLab,
   retrievalProfiles,
+  reviewNovelForeshadowing,
   rollbackNode,
   scanProject,
   sendChatMessage,
+  setWorkspaceId,
   stageProposal,
   vectorBackends,
   vectorSearch,
@@ -59,6 +72,7 @@ type Activity =
   | "capture"
   | "retrieve"
   | "chat"
+  | "novel"
   | "nodes"
   | "graph"
   | "review"
@@ -71,6 +85,7 @@ const tabs: { id: Activity; label: string; icon: GameIconName; description: stri
   { id: "capture", label: "知识采集", icon: "upload", description: "手动、文档与项目导入" },
   { id: "retrieve", label: "检索实验台", icon: "search", description: "Context Bundle 与向量召回" },
   { id: "chat", label: "对话", icon: "chat", description: "模型问答与采集前对话" },
+  { id: "novel", label: "Novel Studio", icon: "book", description: "世界观、人物卡与章节生成" },
   { id: "nodes", label: "节点目录", icon: "nodes", description: "正式知识浏览入口" },
   { id: "graph", label: "知识图谱", icon: "nodes", description: "节点关系与局部图谱" },
   { id: "review", label: "审核队列", icon: "review", description: "候选知识与审批流" },
@@ -97,6 +112,12 @@ const busyAction = ref("");
 const runStateCollapsed = ref(false);
 const notice = ref("就绪");
 const sidebarCollapsed = ref(false);
+const workspaces = ref<WorkspaceRecord[]>([]);
+const selectedWorkspaceId = ref(getWorkspaceId());
+const newWorkspaceId = ref("");
+const newWorkspaceDisplayName = ref("");
+const newWorkspaceType = ref<"project" | "library">("project");
+const seedApprove = ref(false);
 
 const models = ref<ModelConfig[]>(loadModels());
 const selectedModelId = ref(models.value[0]?.id ?? "");
@@ -122,6 +143,7 @@ const manualNodeType = ref("Note");
 const manualAuthority = ref("approved");
 const manualTags = ref("rhine");
 const manualContent = ref("在这里记录需要进入审核流程的知识。");
+const nodeTypes = ref<NodeTypeOption[]>([]);
 const documentPath = ref("");
 const projectRoot = ref("");
 const proposals = ref<ApiRecord[]>([]);
@@ -148,6 +170,78 @@ const graphLimit = ref(100);
 const graphState = ref<ApiRecord | null>(null);
 const vectorQuery = ref("approved chunk indexes");
 const vectorBackendState = ref<ApiRecord | null>(null);
+const novelArtifactType = ref("worldbuilding");
+const novelArtifactTitle = ref("新世界观条目");
+const novelArtifactTags = ref("novel");
+const novelArtifactContent = ref("记录世界规则、人物设定、时间线或伏笔。");
+const novelArtifactFields = ref("");
+const novelQuery = ref("世界观 人物 大纲");
+const novelProjectTitle = ref("未命名作品");
+const novelChapterTitle = ref("第一章");
+const novelChapterNumber = ref(1);
+const novelOutline = ref("本章建立主要冲突，并让角色做出第一个不可逆选择。");
+const novelPovCharacter = ref("");
+const novelTone = ref("冷静、细腻、带轻微悬疑感");
+const novelTargetWords = ref(1200);
+const novelExtraConstraints = ref("");
+const novelSaveDraft = ref(false);
+const novelGenerated = ref<ApiRecord | null>(null);
+const consistencyManuscript = ref("");
+const consistencyStrictness = ref("normal");
+const consistencyReport = ref<ApiRecord | null>(null);
+const foreshadowingManuscript = ref("");
+const plannedPayoffs = ref("");
+const foreshadowingReport = ref<ApiRecord | null>(null);
+const extractionChapterTitle = ref("第一章");
+const extractionChapterText = ref("");
+const extractionTags = ref("novel,chapter");
+const extractionStage = ref(true);
+const extractionResult = ref<ApiRecord | null>(null);
+
+const nodeTypeOptions = computed<NodeTypeOption[]>(() => {
+  if (nodeTypes.value.length > 0) {
+    return nodeTypes.value;
+  }
+  return [
+    {id: "Note", display_name: "Note"},
+    {id: "Constraint", display_name: "Constraint"},
+    {id: "ImportedDocumentSection", display_name: "ImportedDocumentSection"},
+    {id: "ProjectOverview", display_name: "ProjectOverview"},
+    {id: "ModuleMap", display_name: "ModuleMap"},
+  ];
+});
+
+const novelArtifactOptions = [
+  {value: "worldbuilding", label: "世界观"},
+  {value: "character", label: "人物卡"},
+  {value: "timeline", label: "时间线事件"},
+  {value: "outline", label: "大纲节拍"},
+  {value: "chapter", label: "章节草稿"},
+  {value: "foreshadowing", label: "伏笔线索"},
+];
+
+const workflowStats = computed(() => [
+  {label: "正式节点", value: nodes.value.length, tone: "blue"},
+  {label: "待审 Proposal", value: proposals.value.length, tone: "amber"},
+  {label: "Staging", value: stagingEntries.value.length, tone: "green"},
+  {label: "外部变更", value: externalChanges.value.length, tone: "red"},
+]);
+
+const selectedProposalNodes = computed<ApiRecord[]>(() => {
+  return ((selectedProposal.value?.proposed_nodes ?? []) as ApiRecord[]);
+});
+
+const graphNodes = computed<ApiRecord[]>(() => {
+  return Array.isArray(graphState.value?.nodes) ? (graphState.value.nodes as ApiRecord[]) : [];
+});
+
+const graphEdges = computed<ApiRecord[]>(() => {
+  return Array.isArray(graphState.value?.edges) ? (graphState.value.edges as ApiRecord[]) : [];
+});
+
+const graphNodeMap = computed(() => {
+  return new Map(graphNodes.value.map((node) => [String(node.node_id), node]));
+});
 
 const activeTabMeta = computed(() => {
   return tabs.find((tab) => tab.id === activity.value) ?? tabs[0];
@@ -165,11 +259,44 @@ const selectedModel = computed(() => {
   return models.value.find((model) => model.id === selectedModelId.value) ?? models.value[0];
 });
 
+const selectedWorkspace = computed(() => {
+  return workspaces.value.find((workspace) => workspace.workspace_id === selectedWorkspaceId.value);
+});
+
+function shortId(value: unknown, size = 10): string {
+  const text = String(value ?? "");
+  if (text.length <= size * 2 + 1) {
+    return text;
+  }
+  return `${text.slice(0, size)}…${text.slice(-size)}`;
+}
+
+function graphNodeTitle(nodeId: unknown): string {
+  const id = String(nodeId ?? "");
+  const node = graphNodeMap.value.get(id);
+  return node ? `${node.title} · ${shortId(id, 8)}` : shortId(id, 8);
+}
+
+function normalizeModel(model: ModelConfig): ModelConfig {
+  if (model.id === "fake-offline") {
+    return {...model, displayName: "FakeLLM 离线测试"};
+  }
+  return model;
+}
+
+function nodePreview(node: ApiRecord | undefined): string {
+  const content = String(node?.content ?? "");
+  return content.length > 180 ? `${content.slice(0, 180)}…` : content;
+}
+
 onMounted(async () => {
   await perform("初始化", async () => {
+    await refreshWorkspaceRecords();
     const payload = await retrievalProfiles();
     profiles.value = payload.profiles;
     selectedProfileId.value = payload.default_profile_id;
+    const typeConfig = await listNodeTypes("zh");
+    nodeTypes.value = typeConfig.node_types;
     mcpState.value = await mcpCapabilities();
     await Promise.allSettled([
       refreshProposals(),
@@ -180,6 +307,191 @@ onMounted(async () => {
     return {ready: true};
   });
 });
+
+async function refreshWorkspaceRecords(): Promise<WorkspaceRecord[]> {
+  const rows = await listWorkspaces();
+  workspaces.value = rows;
+  if (
+    rows.length > 0 &&
+    !rows.some((workspace) => workspace.workspace_id === selectedWorkspaceId.value)
+  ) {
+    selectedWorkspaceId.value = rows[0].workspace_id;
+  }
+  setWorkspaceId(selectedWorkspaceId.value);
+  return rows;
+}
+
+function clearWorkspaceSelection(): void {
+  selectedProposalId.value = "";
+  selectedTemporaryIds.value = [];
+  selectedStagingIds.value = [];
+  selectedNodeId.value = "";
+  nodeRevisions.value = [];
+  selectedExternalChangeId.value = "";
+  graphState.value = null;
+}
+
+async function refreshWorkspaceData(): Promise<void> {
+  clearWorkspaceSelection();
+  await Promise.allSettled([
+    refreshProposals(),
+    refreshStaging(),
+    refreshNodes(),
+    refreshWorkflowState(),
+  ]);
+}
+
+async function switchWorkspace(): Promise<void> {
+  if (!selectedWorkspaceId.value) {
+    return;
+  }
+  setWorkspaceId(selectedWorkspaceId.value);
+  indexWorkspaceId.value = selectedWorkspaceId.value;
+  projectWorkspaceId.value = selectedWorkspaceId.value;
+  await perform(
+    "切换 Workspace",
+    async () => {
+      await refreshWorkspaceData();
+      return {
+        workspace_id: selectedWorkspaceId.value,
+        display_name: selectedWorkspace.value?.display_name ?? selectedWorkspaceId.value,
+      };
+    },
+    {collapseOutput: true},
+  );
+}
+
+async function createWorkspace(): Promise<void> {
+  const workspaceId = newWorkspaceId.value.trim();
+  if (!workspaceId) {
+    runState.value = {error: "请填写 workspace_id。"};
+    return;
+  }
+  const created = await perform("创建 Workspace", () =>
+    registerWorkspace({
+      workspace_id: workspaceId,
+      workspace_type: newWorkspaceType.value,
+      display_name: newWorkspaceDisplayName.value.trim() || workspaceId,
+    }),
+  );
+  if (!created) {
+    return;
+  }
+  newWorkspaceId.value = "";
+  newWorkspaceDisplayName.value = "";
+  await refreshWorkspaceRecords();
+  selectedWorkspaceId.value = workspaceId;
+  await switchWorkspace();
+}
+
+async function runImportPtilopsisSeed(): Promise<void> {
+  const result = await perform("导入白面鸮初始知识库", () =>
+    importPtilopsisSeed({
+      workspace_id: selectedWorkspaceId.value,
+      display_name: selectedWorkspace.value?.display_name ?? selectedWorkspaceId.value,
+      stage: true,
+      approve: seedApprove.value,
+    }),
+  );
+  if (!result) {
+    return;
+  }
+  await Promise.all([refreshWorkspaceRecords(), refreshWorkspaceData()]);
+  await openActivity(seedApprove.value ? "nodes" : "review");
+}
+
+function parseOptionalJsonObject(value: string): Record<string, unknown> {
+  const cleaned = value.trim();
+  if (!cleaned) {
+    return {};
+  }
+  const parsed = JSON.parse(cleaned) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("结构化字段必须是 JSON object。");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+async function runCreateNovelArtifact(): Promise<void> {
+  let fields: Record<string, unknown>;
+  try {
+    fields = parseOptionalJsonObject(novelArtifactFields.value);
+  } catch (error) {
+    runState.value = {error: error instanceof Error ? error.message : String(error)};
+    return;
+  }
+  const proposal = await perform("创建 Novel Studio 资料", () =>
+    createNovelArtifact({
+      artifact_type: novelArtifactType.value,
+      title: novelArtifactTitle.value,
+      content: novelArtifactContent.value,
+      tags: splitTags(novelArtifactTags.value),
+      fields,
+    }),
+  );
+  if (!proposal) {
+    return;
+  }
+  await refreshProposals();
+  selectedProposalId.value = String(proposal.proposal_id ?? "");
+  await openActivity("review");
+}
+
+async function runGenerateNovelChapter(): Promise<void> {
+  novelGenerated.value = await perform("生成章节草稿", () =>
+    generateNovelChapter({
+      query: novelQuery.value,
+      project_title: novelProjectTitle.value,
+      chapter_title: novelChapterTitle.value,
+      chapter_number: novelChapterNumber.value,
+      outline: novelOutline.value,
+      pov_character: novelPovCharacter.value,
+      tone: novelTone.value,
+      target_words: novelTargetWords.value,
+      extra_constraints: splitTags(novelExtraConstraints.value),
+      save_as_proposal: novelSaveDraft.value,
+    }),
+  );
+  if (novelGenerated.value?.proposal) {
+    await refreshProposals();
+  }
+}
+
+async function runNovelConsistencyCheck(): Promise<void> {
+  consistencyReport.value = await perform("检查小说一致性", () =>
+    checkNovelConsistency({
+      query: novelQuery.value,
+      manuscript: consistencyManuscript.value,
+      strictness: consistencyStrictness.value,
+    }),
+  );
+}
+
+async function runForeshadowingReview(): Promise<void> {
+  foreshadowingReport.value = await perform("检查伏笔回收", () =>
+    reviewNovelForeshadowing({
+      query: novelQuery.value,
+      manuscript: foreshadowingManuscript.value,
+      planned_payoffs: splitTags(plannedPayoffs.value),
+    }),
+  );
+}
+
+async function runExtractChapterKnowledge(): Promise<void> {
+  extractionResult.value = await perform("反向提取章节知识", () =>
+    extractNovelChapterKnowledge({
+      chapter_title: extractionChapterTitle.value,
+      chapter_text: extractionChapterText.value,
+      tags: splitTags(extractionTags.value),
+      stage: extractionStage.value,
+    }),
+  );
+  if (!extractionResult.value) {
+    return;
+  }
+  await Promise.all([refreshProposals(), refreshStaging()]);
+  await openActivity(extractionStage.value ? "review" : "review");
+}
 
 async function perform<T>(
   label: string,
@@ -603,13 +915,13 @@ function pauseChat(): void {
 function loadModels(): ModelConfig[] {
   const raw = localStorage.getItem("rhine-vault-ui-models");
   if (!raw) {
-    return defaultModels();
+    return defaultModels().map(normalizeModel);
   }
   try {
     const parsed = JSON.parse(raw) as ModelConfig[];
-    return parsed.length > 0 ? parsed : defaultModels();
+    return (parsed.length > 0 ? parsed : defaultModels()).map(normalizeModel);
   } catch {
-    return defaultModels();
+    return defaultModels().map(normalizeModel);
   }
 }
 
@@ -634,6 +946,31 @@ function addDeepSeekModel(): void {
     model: "deepseek-v4-flash",
   });
   selectedModelId.value = id;
+}
+
+function addCustomModel(): void {
+  const id = `custom-${Date.now()}`;
+  models.value.push({
+    id,
+    displayName: "自定义模型",
+    provider: "openai-compatible",
+    providerKind: "custom",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    model: "local-model",
+  });
+  selectedModelId.value = id;
+}
+
+function removeModel(id: string): void {
+  if (models.value.length <= 1) {
+    runState.value = {error: "至少保留一个模型配置。"};
+    return;
+  }
+  models.value = models.value.filter((model) => model.id !== id);
+  if (selectedModelId.value === id) {
+    selectedModelId.value = models.value[0]?.id ?? "";
+  }
+  persistModels();
 }
 
 async function refreshMcpCapabilities(): Promise<void> {
@@ -746,6 +1083,24 @@ async function runDependencyUpgradeReport(): Promise<void> {
           </div>
         </div>
         <div class="workspace-topbar-actions">
+          <el-select
+            v-model="selectedWorkspaceId"
+            class="workspace-select"
+            filterable
+            @change="switchWorkspace"
+          >
+            <el-option
+              v-for="workspace in workspaces"
+              :key="workspace.workspace_id"
+              :label="`${workspace.display_name} · ${workspace.workspace_id}`"
+              :value="workspace.workspace_id"
+            />
+            <el-option
+              v-if="workspaces.length === 0"
+              :label="selectedWorkspaceId"
+              :value="selectedWorkspaceId"
+            />
+          </el-select>
           <span class="notice-pill" :class="{ busy: Boolean(busyAction) }">{{ notice }}</span>
           <span class="connection-pill online">Core API</span>
           <span class="uptime-pill">Full Mode</span>
@@ -770,6 +1125,17 @@ async function runDependencyUpgradeReport(): Promise<void> {
       </header>
 
       <section class="main-panel">
+        <section class="overview-strip">
+          <article v-for="item in workflowStats" :key="item.label" :class="['stat-card', item.tone]">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </article>
+          <article class="stat-card wide">
+            <span>当前模型</span>
+            <strong>{{ selectedModel?.displayName ?? "未选择" }}</strong>
+          </article>
+        </section>
+
         <section v-if="activity === 'capture'" class="work-panel">
           <h2>知识采集</h2>
           <div class="panel-grid">
@@ -785,11 +1151,12 @@ async function runDependencyUpgradeReport(): Promise<void> {
                   <el-col :span="7">
                     <el-form-item label="节点类型">
                       <el-select v-model="manualNodeType">
-                        <el-option label="Note" value="Note" />
-                        <el-option label="Constraint" value="Constraint" />
-                        <el-option label="ImportedDocumentSection" value="ImportedDocumentSection" />
-                        <el-option label="ProjectOverview" value="ProjectOverview" />
-                        <el-option label="ModuleMap" value="ModuleMap" />
+                        <el-option
+                          v-for="item in nodeTypeOptions"
+                          :key="item.id"
+                          :label="item.display_name"
+                          :value="item.id"
+                        />
                       </el-select>
                     </el-form-item>
                   </el-col>
@@ -831,6 +1198,22 @@ async function runDependencyUpgradeReport(): Promise<void> {
             <el-card shadow="never">
               <template #header>导入入口</template>
               <el-form label-position="top">
+                <el-alert
+                  title="可先导入白面鸮 / Ptilopsis 初始知识包，快速得到可审核的角色知识库。"
+                  type="info"
+                  :closable="false"
+                />
+                <el-space wrap class="seed-actions">
+                  <el-button
+                    type="primary"
+                    :loading="busyAction === '导入白面鸮初始知识库'"
+                    @click="runImportPtilopsisSeed"
+                  >
+                    导入白面鸮初始知识库
+                  </el-button>
+                  <el-checkbox v-model="seedApprove">导入后立即批准</el-checkbox>
+                </el-space>
+                <el-divider />
                 <el-form-item label="Markdown / TXT / PDF / DOCX 文件路径">
                   <el-input v-model="documentPath" placeholder="E:\\Project\\docs\\note.pdf" />
                 </el-form-item>
@@ -885,10 +1268,12 @@ async function runDependencyUpgradeReport(): Promise<void> {
               <el-col :span="8">
                 <el-form-item label="节点类型">
                   <el-select v-model="nodeType" clearable>
-                    <el-option label="Constraint" value="Constraint" />
-                    <el-option label="Note" value="Note" />
-                    <el-option label="ImportedDocumentSection" value="ImportedDocumentSection" />
-                    <el-option label="ProjectOverview" value="ProjectOverview" />
+                    <el-option
+                      v-for="item in nodeTypeOptions"
+                      :key="item.id"
+                      :label="item.display_name"
+                      :value="item.id"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -960,15 +1345,28 @@ async function runDependencyUpgradeReport(): Promise<void> {
         </section>
 
         <section v-if="activity === 'chat'" class="work-panel chat-panel">
-          <h2>对话</h2>
+          <div class="section-heading">
+            <div>
+              <h2>对话</h2>
+              <p class="muted">当前使用 {{ selectedModel?.displayName ?? "未选择模型" }}</p>
+            </div>
+            <el-button text @click="openActivity('settings')">模型设置</el-button>
+          </div>
           <el-scrollbar class="chat-log">
+            <el-empty v-if="chatMessages.length === 0" description="开始一段可采集的对话" />
             <div v-for="(message, index) in chatMessages" :key="index" :class="['chat-bubble', message.role]">
               <div class="chat-role">{{ message.role }}</div>
-              <div>{{ message.content }}</div>
+              <div class="chat-content">{{ message.content }}</div>
             </div>
           </el-scrollbar>
           <el-space direction="vertical" fill class="composer">
-            <el-input v-model="chatInput" type="textarea" :rows="4" placeholder="输入消息" />
+            <el-input
+              v-model="chatInput"
+              type="textarea"
+              :rows="4"
+              placeholder="输入消息"
+              @keydown.enter.exact.prevent="sendChat"
+            />
             <el-row :gutter="12">
               <el-col :span="12">
                 <el-select v-model="selectedModelId">
@@ -993,10 +1391,298 @@ async function runDependencyUpgradeReport(): Promise<void> {
           </el-space>
         </section>
 
+        <section v-if="activity === 'novel'" class="work-panel novel-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Novel Studio</h2>
+              <p class="muted">基于已批准知识生成章节，并把新设定送回审核流。</p>
+            </div>
+            <el-space>
+              <el-button @click="openActivity('nodes')">查看知识库</el-button>
+              <el-button type="primary" @click="openActivity('review')">进入审核</el-button>
+            </el-space>
+          </div>
+
+          <div class="novel-grid">
+            <el-card shadow="never">
+              <template #header>资料库切片</template>
+              <el-form label-position="top">
+                <el-row :gutter="12">
+                  <el-col :span="8">
+                    <el-form-item label="类型">
+                      <el-select v-model="novelArtifactType">
+                        <el-option
+                          v-for="item in novelArtifactOptions"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="16">
+                    <el-form-item label="标题">
+                      <el-input v-model="novelArtifactTitle" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-form-item label="标签">
+                  <el-input v-model="novelArtifactTags" placeholder="novel,角色名,卷一" />
+                </el-form-item>
+                <el-form-item label="内容">
+                  <el-input v-model="novelArtifactContent" type="textarea" :rows="8" />
+                </el-form-item>
+                <el-form-item label="结构化字段 JSON">
+                  <el-input
+                    v-model="novelArtifactFields"
+                    type="textarea"
+                    :rows="4"
+                    placeholder='{"voice":"冷静克制","relationships":["A-B"]}'
+                  />
+                </el-form-item>
+                <el-button
+                  type="primary"
+                  :loading="busyAction === '创建 Novel Studio 资料'"
+                  @click="runCreateNovelArtifact"
+                >
+                  保存为候选知识
+                </el-button>
+              </el-form>
+            </el-card>
+
+            <el-card shadow="never">
+              <template #header>章节生成</template>
+              <el-form label-position="top">
+                <el-form-item label="检索查询">
+                  <el-input v-model="novelQuery" />
+                </el-form-item>
+                <el-row :gutter="12">
+                  <el-col :span="12">
+                    <el-form-item label="作品">
+                      <el-input v-model="novelProjectTitle" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="8">
+                    <el-form-item label="章节标题">
+                      <el-input v-model="novelChapterTitle" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="4">
+                    <el-form-item label="序号">
+                      <el-input-number v-model="novelChapterNumber" :min="1" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-row :gutter="12">
+                  <el-col :span="8">
+                    <el-form-item label="视角角色">
+                      <el-input v-model="novelPovCharacter" placeholder="可留空" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="8">
+                    <el-form-item label="语气">
+                      <el-input v-model="novelTone" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="8">
+                    <el-form-item label="目标字数">
+                      <el-input-number v-model="novelTargetWords" :min="100" :max="20000" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-form-item label="本章大纲">
+                  <el-input v-model="novelOutline" type="textarea" :rows="5" />
+                </el-form-item>
+                <el-form-item label="额外约束">
+                  <el-input v-model="novelExtraConstraints" placeholder="逗号分隔" />
+                </el-form-item>
+                <el-space wrap>
+                  <el-button
+                    type="primary"
+                    :loading="busyAction === '生成章节草稿'"
+                    @click="runGenerateNovelChapter"
+                  >
+                    生成章节草稿
+                  </el-button>
+                  <el-checkbox v-model="novelSaveDraft">生成后保存为候选章节</el-checkbox>
+                </el-space>
+              </el-form>
+            </el-card>
+          </div>
+
+          <el-card v-if="novelGenerated" shadow="never" class="novel-output">
+            <template #header>
+              <div class="card-header-line">
+                <span>{{ novelGenerated.title ?? "章节草稿" }}</span>
+                <small>{{ (novelGenerated.citations ?? []).length }} citations</small>
+              </div>
+            </template>
+            <pre>{{ novelGenerated.markdown }}</pre>
+          </el-card>
+
+          <el-tabs class="novel-tabs">
+            <el-tab-pane label="一致性检查">
+              <div class="novel-check-grid">
+                <el-card shadow="never">
+                  <el-form label-position="top">
+                    <el-form-item label="严格度">
+                      <el-select v-model="consistencyStrictness">
+                        <el-option label="normal" value="normal" />
+                        <el-option label="strict" value="strict" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="待检查正文">
+                      <el-input v-model="consistencyManuscript" type="textarea" :rows="10" />
+                    </el-form-item>
+                    <el-button
+                      type="primary"
+                      :loading="busyAction === '检查小说一致性'"
+                      @click="runNovelConsistencyCheck"
+                    >
+                      检查一致性
+                    </el-button>
+                  </el-form>
+                </el-card>
+                <el-card shadow="never">
+                  <template #header>报告</template>
+                  <el-empty v-if="!consistencyReport" description="尚未检查" />
+                  <template v-else>
+                    <el-alert
+                      :title="`发现 ${consistencyReport.issue_count ?? 0} 个问题`"
+                      type="info"
+                      :closable="false"
+                    />
+                    <div
+                      v-for="issue in consistencyReport.issues ?? []"
+                      :key="`${issue.code}-${issue.message}`"
+                      class="issue-row"
+                    >
+                      <el-tag :type="issue.severity === 'error' ? 'danger' : 'warning'">
+                        {{ issue.severity }}
+                      </el-tag>
+                      <strong>{{ issue.code }}</strong>
+                      <span>{{ issue.message }}</span>
+                    </div>
+                  </template>
+                </el-card>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="伏笔回收">
+              <div class="novel-check-grid">
+                <el-card shadow="never">
+                  <el-form label-position="top">
+                    <el-form-item label="计划回收点">
+                      <el-input v-model="plannedPayoffs" placeholder="逗号分隔" />
+                    </el-form-item>
+                    <el-form-item label="章节正文">
+                      <el-input v-model="foreshadowingManuscript" type="textarea" :rows="10" />
+                    </el-form-item>
+                    <el-button
+                      type="primary"
+                      :loading="busyAction === '检查伏笔回收'"
+                      @click="runForeshadowingReview"
+                    >
+                      检查伏笔
+                    </el-button>
+                  </el-form>
+                </el-card>
+                <el-card shadow="never">
+                  <template #header>伏笔报告</template>
+                  <el-empty v-if="!foreshadowingReport" description="尚未检查" />
+                  <template v-else>
+                    <el-descriptions :column="3" border>
+                      <el-descriptions-item label="线索">
+                        {{ (foreshadowingReport.cues ?? []).length }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="已回收">
+                        {{ (foreshadowingReport.callbacks ?? []).length }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="未回收">
+                        {{ (foreshadowingReport.unresolved_cues ?? []).length }}
+                      </el-descriptions-item>
+                    </el-descriptions>
+                    <div
+                      v-for="cue in foreshadowingReport.unresolved_cues ?? []"
+                      :key="cue.id"
+                      class="issue-row"
+                    >
+                      <el-tag type="warning">{{ cue.id }}</el-tag>
+                      <span>{{ cue.text }}</span>
+                    </div>
+                  </template>
+                </el-card>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="章节反向提取">
+              <div class="novel-check-grid">
+                <el-card shadow="never">
+                  <el-form label-position="top">
+                    <el-form-item label="章节标题">
+                      <el-input v-model="extractionChapterTitle" />
+                    </el-form-item>
+                    <el-form-item label="标签">
+                      <el-input v-model="extractionTags" />
+                    </el-form-item>
+                    <el-form-item label="章节正文">
+                      <el-input v-model="extractionChapterText" type="textarea" :rows="10" />
+                    </el-form-item>
+                    <el-space wrap>
+                      <el-button
+                        type="primary"
+                        :loading="busyAction === '反向提取章节知识'"
+                        @click="runExtractChapterKnowledge"
+                      >
+                        提取为候选知识
+                      </el-button>
+                      <el-checkbox v-model="extractionStage">提取后进入 staging</el-checkbox>
+                    </el-space>
+                  </el-form>
+                </el-card>
+                <el-card shadow="never">
+                  <template #header>提取结果</template>
+                  <el-empty v-if="!extractionResult" description="尚未提取" />
+                  <pre v-else>{{ JSON.stringify(extractionResult, null, 2) }}</pre>
+                </el-card>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </section>
+
         <section v-if="activity === 'settings'" class="work-panel">
           <h2>模型设置</h2>
           <el-space direction="vertical" fill>
-            <el-button @click="addDeepSeekModel">添加 DeepSeek 模型</el-button>
+            <el-card shadow="never">
+              <template #header>Workspace</template>
+              <el-row :gutter="12">
+                <el-col :span="7">
+                  <el-input v-model="newWorkspaceId" placeholder="workspace-id" />
+                </el-col>
+                <el-col :span="7">
+                  <el-input v-model="newWorkspaceDisplayName" placeholder="显示名称" />
+                </el-col>
+                <el-col :span="5">
+                  <el-select v-model="newWorkspaceType">
+                    <el-option label="Project" value="project" />
+                    <el-option label="Library" value="library" />
+                  </el-select>
+                </el-col>
+                <el-col :span="5">
+                  <el-button type="primary" @click="createWorkspace">创建并切换</el-button>
+                </el-col>
+              </el-row>
+              <el-table :data="workspaces" border class="phase5-table">
+                <el-table-column prop="display_name" label="显示名称" min-width="180" />
+                <el-table-column prop="workspace_id" label="Workspace ID" min-width="180" />
+                <el-table-column prop="workspace_type" label="类型" width="110" />
+              </el-table>
+            </el-card>
+            <el-space wrap>
+              <el-button type="primary" @click="addDeepSeekModel">添加 DeepSeek 模型</el-button>
+              <el-button @click="addCustomModel">添加自定义模型</el-button>
+              <el-button @click="persistModels">保存本地模型配置</el-button>
+            </el-space>
             <el-table :data="models" border>
               <el-table-column label="显示名称" min-width="180">
                 <template #default="{ row }">
@@ -1018,8 +1704,17 @@ async function runDependencyUpgradeReport(): Promise<void> {
                   <el-input v-model="row.apiKey" type="password" show-password />
                 </template>
               </el-table-column>
+              <el-table-column label="思考" width="110">
+                <template #default="{ row }">
+                  <el-switch v-model="row.thinkingEnabled" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="90" fixed="right">
+                <template #default="{ row }">
+                  <el-button text type="danger" @click="removeModel(row.id)">删除</el-button>
+                </template>
+              </el-table-column>
             </el-table>
-            <el-button type="primary" @click="persistModels">保存本地模型配置</el-button>
           </el-space>
         </section>
 
@@ -1203,8 +1898,10 @@ async function runDependencyUpgradeReport(): Promise<void> {
           <el-space wrap>
             <el-button type="primary" @click="refreshNodes">刷新节点</el-button>
             <el-button :disabled="!selectedNodeId" @click="refreshNodeRevisions">加载 revision</el-button>
+            <el-button v-if="nodes.length === 0" @click="openActivity('capture')">去采集知识</el-button>
           </el-space>
-          <div class="node-layout">
+          <el-empty v-if="nodes.length === 0" description="当前 workspace 还没有 approved 节点" />
+          <div v-else class="node-layout">
             <el-table :data="nodes" border height="420" highlight-current-row @current-change="selectNode">
               <el-table-column prop="title" label="标题" min-width="220" />
               <el-table-column prop="node_type" label="类型" width="160" />
@@ -1217,7 +1914,7 @@ async function runDependencyUpgradeReport(): Promise<void> {
               <template v-if="selectedNode">
                 <h3>{{ selectedNode.title }}</h3>
                 <p class="muted mono">{{ selectedNode.node_id }}</p>
-                <p>{{ selectedNode.content }}</p>
+                <p>{{ nodePreview(selectedNode) }}</p>
                 <el-space wrap>
                   <el-tag v-for="tag in selectedNode.tags ?? []" :key="tag">{{ tag }}</el-tag>
                 </el-space>
@@ -1263,8 +1960,42 @@ async function runDependencyUpgradeReport(): Promise<void> {
             </el-form>
           </el-card>
           <el-card v-if="graphState" shadow="never">
-            <template #header>图谱数据</template>
-            <pre>{{ JSON.stringify(graphState, null, 2) }}</pre>
+            <template #header>
+              <div class="card-header-line">
+                <span>图谱视图</span>
+                <small>{{ graphNodes.length }} nodes · {{ graphEdges.length }} edges</small>
+              </div>
+            </template>
+            <div v-if="graphNodes.length" class="graph-layout">
+              <div class="graph-canvas">
+                <article
+                  v-for="node in graphNodes"
+                  :key="node.node_id"
+                  class="graph-node"
+                  :class="{ selected: graphNodeId === node.node_id }"
+                  @click="graphNodeId = String(node.node_id)"
+                >
+                  <strong>{{ node.title }}</strong>
+                  <span>{{ node.node_type }} · {{ node.authority }}</span>
+                  <small class="mono">{{ shortId(node.node_id, 12) }}</small>
+                </article>
+              </div>
+              <el-table :data="graphEdges" border class="graph-edge-table">
+                <el-table-column label="Source" min-width="210">
+                  <template #default="{ row }">{{ graphNodeTitle(row.source) }}</template>
+                </el-table-column>
+                <el-table-column prop="type" label="关系" width="150" />
+                <el-table-column label="Target" min-width="210">
+                  <template #default="{ row }">{{ graphNodeTitle(row.target) }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <el-empty v-else description="当前范围没有可展示节点" />
+            <el-collapse class="raw-collapse">
+              <el-collapse-item title="原始数据" name="raw-graph">
+                <pre>{{ JSON.stringify(graphState, null, 2) }}</pre>
+              </el-collapse-item>
+            </el-collapse>
           </el-card>
         </section>
 
@@ -1288,12 +2019,13 @@ async function runDependencyUpgradeReport(): Promise<void> {
                 <el-col :span="14">
                   <el-card shadow="never">
                     <template #header>候选节点</template>
-                    <el-checkbox-group v-model="selectedTemporaryIds">
-                      <div v-for="node in selectedProposal?.proposed_nodes ?? []" :key="node.temporary_id" class="candidate-row">
+                    <el-empty v-if="selectedProposalNodes.length === 0" description="请选择 Proposal" />
+                    <el-checkbox-group v-else v-model="selectedTemporaryIds">
+                      <div v-for="node in selectedProposalNodes" :key="node.temporary_id" class="candidate-row">
                         <el-checkbox :label="String(node.temporary_id)">
                           {{ node.title }} · {{ node.node_type }}
                         </el-checkbox>
-                        <p>{{ node.content }}</p>
+                        <p>{{ nodePreview(node) }}</p>
                       </div>
                     </el-checkbox-group>
                   </el-card>
@@ -1309,12 +2041,13 @@ async function runDependencyUpgradeReport(): Promise<void> {
               <el-checkbox-group v-model="selectedStagingIds" class="staging-list">
                 <article v-for="entry in stagingEntries" :key="entry.entry_id" class="staging-card">
                   <el-checkbox :label="String(entry.entry_id)">
-                    {{ entry.candidate?.title ?? entry.entry_id }}
+                    {{ entry.proposed_node?.title ?? entry.entry_id }}
                   </el-checkbox>
                   <small class="mono">{{ entry.entry_id }}</small>
-                  <p>{{ entry.candidate?.content }}</p>
+                  <p>{{ nodePreview(entry.proposed_node) }}</p>
                 </article>
               </el-checkbox-group>
+              <el-empty v-if="stagingEntries.length === 0" description="暂无 pending staging" />
             </el-tab-pane>
 
             <el-tab-pane label="ExternalChange">
