@@ -15,11 +15,9 @@ import {
   approveExternalChange,
   approveStaging,
   buildContextBundle,
-  checkNovelConsistency,
   buildImportPlan,
   callMcpTool,
   captureConversation,
-  createNovelArtifact,
   createManualProposal,
   createWorkspaceSnapshot,
   defaultModels,
@@ -27,8 +25,6 @@ import {
   detectExternalChanges,
   documentImporters,
   emergencyReadonly,
-  extractNovelChapterKnowledge,
-  generateNovelChapter,
   getWorkspaceId,
   importDocument,
   importPtilopsisSeed,
@@ -56,7 +52,6 @@ import {
   rejectProposal,
   retrievalLab,
   retrievalProfiles,
-  reviewNovelForeshadowing,
   rollbackNode,
   scanProject,
   sendChatMessage,
@@ -72,7 +67,6 @@ type Activity =
   | "capture"
   | "retrieve"
   | "chat"
-  | "novel"
   | "nodes"
   | "graph"
   | "review"
@@ -85,7 +79,6 @@ const tabs: { id: Activity; label: string; icon: GameIconName; description: stri
   { id: "capture", label: "知识采集", icon: "upload", description: "手动、文档与项目导入" },
   { id: "retrieve", label: "检索实验台", icon: "search", description: "Context Bundle 与向量召回" },
   { id: "chat", label: "对话", icon: "chat", description: "模型问答与采集前对话" },
-  { id: "novel", label: "Novel Studio", icon: "book", description: "世界观、人物卡与章节生成" },
   { id: "nodes", label: "节点目录", icon: "nodes", description: "正式知识浏览入口" },
   { id: "graph", label: "知识图谱", icon: "nodes", description: "节点关系与局部图谱" },
   { id: "review", label: "审核队列", icon: "review", description: "候选知识与审批流" },
@@ -95,7 +88,17 @@ const tabs: { id: Activity; label: string; icon: GameIconName; description: stri
   { id: "settings", label: "系统设置", icon: "settings", description: "模型配置与本地偏好" },
 ];
 
-const activity = ref<Activity>("capture");
+const activityIds = new Set<Activity>(tabs.map((tab) => tab.id));
+
+function initialActivity(): Activity {
+  const stored = localStorage.getItem("rhine-vault-ui-activity") as Activity | null;
+  if (stored && activityIds.has(stored)) {
+    return stored;
+  }
+  return "capture";
+}
+
+const activity = ref<Activity>(initialActivity());
 const profiles = ref<RetrievalProfile[]>([]);
 const selectedProfileId = ref("technical-documentation");
 const query = ref("approval constraints");
@@ -170,33 +173,6 @@ const graphLimit = ref(100);
 const graphState = ref<ApiRecord | null>(null);
 const vectorQuery = ref("approved chunk indexes");
 const vectorBackendState = ref<ApiRecord | null>(null);
-const novelArtifactType = ref("worldbuilding");
-const novelArtifactTitle = ref("新世界观条目");
-const novelArtifactTags = ref("novel");
-const novelArtifactContent = ref("记录世界规则、人物设定、时间线或伏笔。");
-const novelArtifactFields = ref("");
-const novelQuery = ref("世界观 人物 大纲");
-const novelProjectTitle = ref("未命名作品");
-const novelChapterTitle = ref("第一章");
-const novelChapterNumber = ref(1);
-const novelOutline = ref("本章建立主要冲突，并让角色做出第一个不可逆选择。");
-const novelPovCharacter = ref("");
-const novelTone = ref("冷静、细腻、带轻微悬疑感");
-const novelTargetWords = ref(1200);
-const novelExtraConstraints = ref("");
-const novelSaveDraft = ref(false);
-const novelGenerated = ref<ApiRecord | null>(null);
-const consistencyManuscript = ref("");
-const consistencyStrictness = ref("normal");
-const consistencyReport = ref<ApiRecord | null>(null);
-const foreshadowingManuscript = ref("");
-const plannedPayoffs = ref("");
-const foreshadowingReport = ref<ApiRecord | null>(null);
-const extractionChapterTitle = ref("第一章");
-const extractionChapterText = ref("");
-const extractionTags = ref("novel,chapter");
-const extractionStage = ref(true);
-const extractionResult = ref<ApiRecord | null>(null);
 
 const nodeTypeOptions = computed<NodeTypeOption[]>(() => {
   if (nodeTypes.value.length > 0) {
@@ -211,21 +187,134 @@ const nodeTypeOptions = computed<NodeTypeOption[]>(() => {
   ];
 });
 
-const novelArtifactOptions = [
-  {value: "worldbuilding", label: "世界观"},
-  {value: "character", label: "人物卡"},
-  {value: "timeline", label: "时间线事件"},
-  {value: "outline", label: "大纲节拍"},
-  {value: "chapter", label: "章节草稿"},
-  {value: "foreshadowing", label: "伏笔线索"},
-];
-
 const workflowStats = computed(() => [
   {label: "正式节点", value: nodes.value.length, tone: "blue"},
   {label: "待审 Proposal", value: proposals.value.length, tone: "amber"},
   {label: "Staging", value: stagingEntries.value.length, tone: "green"},
   {label: "外部变更", value: externalChanges.value.length, tone: "red"},
 ]);
+
+type GuideStep = {
+  title: string;
+  body: string;
+  target?: Activity;
+  action?: string;
+};
+
+const databaseGuideSteps = computed<GuideStep[]>(() => {
+  if (activity.value === "capture") {
+    return [
+      {
+        title: "1. 先生成候选知识",
+        body: "手动输入、导入文档或扫描项目都会先进入 Proposal，不会直接污染正式知识库。",
+      },
+      {
+        title: "2. 去审核队列确认",
+        body: "候选内容需要人工选择、保存为 staging，再批准进入正式节点。",
+        target: "review",
+        action: "打开审核队列",
+      },
+      {
+        title: "3. 批准后再检索",
+        body: "只有 approved 节点会成为检索、图谱和模型上下文的稳定来源。",
+        target: "retrieve",
+        action: "进入检索实验台",
+      },
+    ];
+  }
+  if (activity.value === "review") {
+    return [
+      {
+        title: "1. Proposal 是候选草稿",
+        body: "先选中 Proposal，再勾选需要保留的候选节点，保存为 staging。",
+      },
+      {
+        title: "2. Staging 是批准前缓冲区",
+        body: "进入 Staging 标签页后批准所选条目，系统才会写入正式 MemoryNode。",
+      },
+      {
+        title: "3. 批准后检查节点目录",
+        body: "正式节点、revision 和 rollback 都在节点目录中查看。",
+        target: "nodes",
+        action: "查看节点目录",
+      },
+    ];
+  }
+  if (activity.value === "nodes") {
+    return [
+      {
+        title: "1. 这里显示正式知识",
+        body: "节点目录只看 approved/canonical/reference 等正式节点，不显示待审候选。",
+      },
+      {
+        title: "2. 修改不直接覆盖",
+        body: "回滚会生成新的 revision，变更仍然保留审计记录。",
+      },
+      {
+        title: "3. 需要理解关系时看图谱",
+        body: "图谱会把节点关系展开，适合检查人物、项目或世界观之间的连接。",
+        target: "graph",
+        action: "打开知识图谱",
+      },
+    ];
+  }
+  if (activity.value === "retrieve") {
+    return [
+      {
+        title: "1. 先写自然语言查询",
+        body: "检索实验台会用当前 workspace 的正式节点构建 Context Bundle。",
+      },
+      {
+        title: "2. 用过滤器缩小范围",
+        body: "节点类型、Authority、标签和向量开关都只是检索策略，不会改变数据库。",
+      },
+      {
+        title: "3. 结果异常时回到知识库补节点",
+        body: "如果没有合适来源，先采集或批准更多节点，再重新检索。",
+        target: "capture",
+        action: "采集新知识",
+      },
+    ];
+  }
+  if (activity.value === "graph") {
+    return [
+      {
+        title: "1. 留空中心节点看概览",
+        body: "中心节点为空时会加载当前 workspace 的局部概览。",
+      },
+      {
+        title: "2. 点击节点可设为中心",
+        body: "再点击加载图谱，可以逐步追踪关系。",
+      },
+      {
+        title: "3. 关系来自正式节点",
+        body: "如果图谱缺边，需要在候选知识中补充 relation，再走审核流。",
+        target: "capture",
+        action: "补充关系知识",
+      },
+    ];
+  }
+  return [
+    {
+      title: "知识库主流程",
+      body: "采集候选 -> 审核 staging -> 批准成正式节点 -> 检索/图谱/上下文使用。",
+      target: "capture",
+      action: "开始采集",
+    },
+    {
+      title: "正式知识有审计边界",
+      body: "任何生成、导入或插件产物都必须经过 Proposal 和 Staging。",
+      target: "review",
+      action: "查看审核",
+    },
+    {
+      title: "不确定就先看节点目录",
+      body: "节点目录展示当前可被检索和引用的正式知识。",
+      target: "nodes",
+      action: "查看节点",
+    },
+  ];
+});
 
 const selectedProposalNodes = computed<ApiRecord[]>(() => {
   return ((selectedProposal.value?.proposed_nodes ?? []) as ApiRecord[]);
@@ -400,99 +489,6 @@ async function runImportPtilopsisSeed(): Promise<void> {
   await openActivity(seedApprove.value ? "nodes" : "review");
 }
 
-function parseOptionalJsonObject(value: string): Record<string, unknown> {
-  const cleaned = value.trim();
-  if (!cleaned) {
-    return {};
-  }
-  const parsed = JSON.parse(cleaned) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("结构化字段必须是 JSON object。");
-  }
-  return parsed as Record<string, unknown>;
-}
-
-async function runCreateNovelArtifact(): Promise<void> {
-  let fields: Record<string, unknown>;
-  try {
-    fields = parseOptionalJsonObject(novelArtifactFields.value);
-  } catch (error) {
-    runState.value = {error: error instanceof Error ? error.message : String(error)};
-    return;
-  }
-  const proposal = await perform("创建 Novel Studio 资料", () =>
-    createNovelArtifact({
-      artifact_type: novelArtifactType.value,
-      title: novelArtifactTitle.value,
-      content: novelArtifactContent.value,
-      tags: splitTags(novelArtifactTags.value),
-      fields,
-    }),
-  );
-  if (!proposal) {
-    return;
-  }
-  await refreshProposals();
-  selectedProposalId.value = String(proposal.proposal_id ?? "");
-  await openActivity("review");
-}
-
-async function runGenerateNovelChapter(): Promise<void> {
-  novelGenerated.value = await perform("生成章节草稿", () =>
-    generateNovelChapter({
-      query: novelQuery.value,
-      project_title: novelProjectTitle.value,
-      chapter_title: novelChapterTitle.value,
-      chapter_number: novelChapterNumber.value,
-      outline: novelOutline.value,
-      pov_character: novelPovCharacter.value,
-      tone: novelTone.value,
-      target_words: novelTargetWords.value,
-      extra_constraints: splitTags(novelExtraConstraints.value),
-      save_as_proposal: novelSaveDraft.value,
-    }),
-  );
-  if (novelGenerated.value?.proposal) {
-    await refreshProposals();
-  }
-}
-
-async function runNovelConsistencyCheck(): Promise<void> {
-  consistencyReport.value = await perform("检查小说一致性", () =>
-    checkNovelConsistency({
-      query: novelQuery.value,
-      manuscript: consistencyManuscript.value,
-      strictness: consistencyStrictness.value,
-    }),
-  );
-}
-
-async function runForeshadowingReview(): Promise<void> {
-  foreshadowingReport.value = await perform("检查伏笔回收", () =>
-    reviewNovelForeshadowing({
-      query: novelQuery.value,
-      manuscript: foreshadowingManuscript.value,
-      planned_payoffs: splitTags(plannedPayoffs.value),
-    }),
-  );
-}
-
-async function runExtractChapterKnowledge(): Promise<void> {
-  extractionResult.value = await perform("反向提取章节知识", () =>
-    extractNovelChapterKnowledge({
-      chapter_title: extractionChapterTitle.value,
-      chapter_text: extractionChapterText.value,
-      tags: splitTags(extractionTags.value),
-      stage: extractionStage.value,
-    }),
-  );
-  if (!extractionResult.value) {
-    return;
-  }
-  await Promise.all([refreshProposals(), refreshStaging()]);
-  await openActivity(extractionStage.value ? "review" : "review");
-}
-
 async function perform<T>(
   label: string,
   task: () => Promise<T>,
@@ -526,6 +522,7 @@ async function perform<T>(
 }
 
 async function openActivity(next: Activity): Promise<void> {
+  localStorage.setItem("rhine-vault-ui-activity", next);
   activity.value = next;
   if (next === "capture") {
     await perform("加载采集队列", refreshProposals, {silent: true, collapseOutput: true});
@@ -1136,6 +1133,25 @@ async function runDependencyUpgradeReport(): Promise<void> {
           </article>
         </section>
 
+        <section class="knowledge-guide">
+          <div class="guide-heading">
+            <div>
+              <strong>知识库操作导览</strong>
+              <span>当前页面: {{ activeTabMeta.label }}</span>
+            </div>
+            <small>所有正式知识都必须经过 Proposal / Staging / Approval。</small>
+          </div>
+          <div class="guide-grid">
+            <article v-for="step in databaseGuideSteps" :key="step.title" class="guide-card">
+              <strong>{{ step.title }}</strong>
+              <p>{{ step.body }}</p>
+              <el-button v-if="step.target" text type="primary" @click="openActivity(step.target)">
+                {{ step.action ?? "前往" }}
+              </el-button>
+            </article>
+          </div>
+        </section>
+
         <section v-if="activity === 'capture'" class="work-panel">
           <h2>知识采集</h2>
           <div class="panel-grid">
@@ -1389,265 +1405,6 @@ async function runDependencyUpgradeReport(): Promise<void> {
               </el-col>
             </el-row>
           </el-space>
-        </section>
-
-        <section v-if="activity === 'novel'" class="work-panel novel-panel">
-          <div class="section-heading">
-            <div>
-              <h2>Novel Studio</h2>
-              <p class="muted">基于已批准知识生成章节，并把新设定送回审核流。</p>
-            </div>
-            <el-space>
-              <el-button @click="openActivity('nodes')">查看知识库</el-button>
-              <el-button type="primary" @click="openActivity('review')">进入审核</el-button>
-            </el-space>
-          </div>
-
-          <div class="novel-grid">
-            <el-card shadow="never">
-              <template #header>资料库切片</template>
-              <el-form label-position="top">
-                <el-row :gutter="12">
-                  <el-col :span="8">
-                    <el-form-item label="类型">
-                      <el-select v-model="novelArtifactType">
-                        <el-option
-                          v-for="item in novelArtifactOptions"
-                          :key="item.value"
-                          :label="item.label"
-                          :value="item.value"
-                        />
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="16">
-                    <el-form-item label="标题">
-                      <el-input v-model="novelArtifactTitle" />
-                    </el-form-item>
-                  </el-col>
-                </el-row>
-                <el-form-item label="标签">
-                  <el-input v-model="novelArtifactTags" placeholder="novel,角色名,卷一" />
-                </el-form-item>
-                <el-form-item label="内容">
-                  <el-input v-model="novelArtifactContent" type="textarea" :rows="8" />
-                </el-form-item>
-                <el-form-item label="结构化字段 JSON">
-                  <el-input
-                    v-model="novelArtifactFields"
-                    type="textarea"
-                    :rows="4"
-                    placeholder='{"voice":"冷静克制","relationships":["A-B"]}'
-                  />
-                </el-form-item>
-                <el-button
-                  type="primary"
-                  :loading="busyAction === '创建 Novel Studio 资料'"
-                  @click="runCreateNovelArtifact"
-                >
-                  保存为候选知识
-                </el-button>
-              </el-form>
-            </el-card>
-
-            <el-card shadow="never">
-              <template #header>章节生成</template>
-              <el-form label-position="top">
-                <el-form-item label="检索查询">
-                  <el-input v-model="novelQuery" />
-                </el-form-item>
-                <el-row :gutter="12">
-                  <el-col :span="12">
-                    <el-form-item label="作品">
-                      <el-input v-model="novelProjectTitle" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="章节标题">
-                      <el-input v-model="novelChapterTitle" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="4">
-                    <el-form-item label="序号">
-                      <el-input-number v-model="novelChapterNumber" :min="1" />
-                    </el-form-item>
-                  </el-col>
-                </el-row>
-                <el-row :gutter="12">
-                  <el-col :span="8">
-                    <el-form-item label="视角角色">
-                      <el-input v-model="novelPovCharacter" placeholder="可留空" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="语气">
-                      <el-input v-model="novelTone" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="目标字数">
-                      <el-input-number v-model="novelTargetWords" :min="100" :max="20000" />
-                    </el-form-item>
-                  </el-col>
-                </el-row>
-                <el-form-item label="本章大纲">
-                  <el-input v-model="novelOutline" type="textarea" :rows="5" />
-                </el-form-item>
-                <el-form-item label="额外约束">
-                  <el-input v-model="novelExtraConstraints" placeholder="逗号分隔" />
-                </el-form-item>
-                <el-space wrap>
-                  <el-button
-                    type="primary"
-                    :loading="busyAction === '生成章节草稿'"
-                    @click="runGenerateNovelChapter"
-                  >
-                    生成章节草稿
-                  </el-button>
-                  <el-checkbox v-model="novelSaveDraft">生成后保存为候选章节</el-checkbox>
-                </el-space>
-              </el-form>
-            </el-card>
-          </div>
-
-          <el-card v-if="novelGenerated" shadow="never" class="novel-output">
-            <template #header>
-              <div class="card-header-line">
-                <span>{{ novelGenerated.title ?? "章节草稿" }}</span>
-                <small>{{ (novelGenerated.citations ?? []).length }} citations</small>
-              </div>
-            </template>
-            <pre>{{ novelGenerated.markdown }}</pre>
-          </el-card>
-
-          <el-tabs class="novel-tabs">
-            <el-tab-pane label="一致性检查">
-              <div class="novel-check-grid">
-                <el-card shadow="never">
-                  <el-form label-position="top">
-                    <el-form-item label="严格度">
-                      <el-select v-model="consistencyStrictness">
-                        <el-option label="normal" value="normal" />
-                        <el-option label="strict" value="strict" />
-                      </el-select>
-                    </el-form-item>
-                    <el-form-item label="待检查正文">
-                      <el-input v-model="consistencyManuscript" type="textarea" :rows="10" />
-                    </el-form-item>
-                    <el-button
-                      type="primary"
-                      :loading="busyAction === '检查小说一致性'"
-                      @click="runNovelConsistencyCheck"
-                    >
-                      检查一致性
-                    </el-button>
-                  </el-form>
-                </el-card>
-                <el-card shadow="never">
-                  <template #header>报告</template>
-                  <el-empty v-if="!consistencyReport" description="尚未检查" />
-                  <template v-else>
-                    <el-alert
-                      :title="`发现 ${consistencyReport.issue_count ?? 0} 个问题`"
-                      type="info"
-                      :closable="false"
-                    />
-                    <div
-                      v-for="issue in consistencyReport.issues ?? []"
-                      :key="`${issue.code}-${issue.message}`"
-                      class="issue-row"
-                    >
-                      <el-tag :type="issue.severity === 'error' ? 'danger' : 'warning'">
-                        {{ issue.severity }}
-                      </el-tag>
-                      <strong>{{ issue.code }}</strong>
-                      <span>{{ issue.message }}</span>
-                    </div>
-                  </template>
-                </el-card>
-              </div>
-            </el-tab-pane>
-
-            <el-tab-pane label="伏笔回收">
-              <div class="novel-check-grid">
-                <el-card shadow="never">
-                  <el-form label-position="top">
-                    <el-form-item label="计划回收点">
-                      <el-input v-model="plannedPayoffs" placeholder="逗号分隔" />
-                    </el-form-item>
-                    <el-form-item label="章节正文">
-                      <el-input v-model="foreshadowingManuscript" type="textarea" :rows="10" />
-                    </el-form-item>
-                    <el-button
-                      type="primary"
-                      :loading="busyAction === '检查伏笔回收'"
-                      @click="runForeshadowingReview"
-                    >
-                      检查伏笔
-                    </el-button>
-                  </el-form>
-                </el-card>
-                <el-card shadow="never">
-                  <template #header>伏笔报告</template>
-                  <el-empty v-if="!foreshadowingReport" description="尚未检查" />
-                  <template v-else>
-                    <el-descriptions :column="3" border>
-                      <el-descriptions-item label="线索">
-                        {{ (foreshadowingReport.cues ?? []).length }}
-                      </el-descriptions-item>
-                      <el-descriptions-item label="已回收">
-                        {{ (foreshadowingReport.callbacks ?? []).length }}
-                      </el-descriptions-item>
-                      <el-descriptions-item label="未回收">
-                        {{ (foreshadowingReport.unresolved_cues ?? []).length }}
-                      </el-descriptions-item>
-                    </el-descriptions>
-                    <div
-                      v-for="cue in foreshadowingReport.unresolved_cues ?? []"
-                      :key="cue.id"
-                      class="issue-row"
-                    >
-                      <el-tag type="warning">{{ cue.id }}</el-tag>
-                      <span>{{ cue.text }}</span>
-                    </div>
-                  </template>
-                </el-card>
-              </div>
-            </el-tab-pane>
-
-            <el-tab-pane label="章节反向提取">
-              <div class="novel-check-grid">
-                <el-card shadow="never">
-                  <el-form label-position="top">
-                    <el-form-item label="章节标题">
-                      <el-input v-model="extractionChapterTitle" />
-                    </el-form-item>
-                    <el-form-item label="标签">
-                      <el-input v-model="extractionTags" />
-                    </el-form-item>
-                    <el-form-item label="章节正文">
-                      <el-input v-model="extractionChapterText" type="textarea" :rows="10" />
-                    </el-form-item>
-                    <el-space wrap>
-                      <el-button
-                        type="primary"
-                        :loading="busyAction === '反向提取章节知识'"
-                        @click="runExtractChapterKnowledge"
-                      >
-                        提取为候选知识
-                      </el-button>
-                      <el-checkbox v-model="extractionStage">提取后进入 staging</el-checkbox>
-                    </el-space>
-                  </el-form>
-                </el-card>
-                <el-card shadow="never">
-                  <template #header>提取结果</template>
-                  <el-empty v-if="!extractionResult" description="尚未提取" />
-                  <pre v-else>{{ JSON.stringify(extractionResult, null, 2) }}</pre>
-                </el-card>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
         </section>
 
         <section v-if="activity === 'settings'" class="work-panel">
@@ -2134,5 +1891,4 @@ async function runDependencyUpgradeReport(): Promise<void> {
     </main>
   </div>
 </template>
-
 

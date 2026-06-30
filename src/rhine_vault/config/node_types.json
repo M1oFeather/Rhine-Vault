@@ -2,7 +2,7 @@
   "schema_version": 1,
   "extension_policy": {
     "mode": "approval_required",
-    "future_entrypoints": ["settings", "conversation", "novel_studio"]
+    "future_entrypoints": ["settings", "conversation", "plugins"]
   },
   "node_types": [
     {
@@ -58,83 +58,6 @@
       "description": {
         "zh": "从源码或目录结构中提取的模块职责映射。",
         "en": "Module responsibility map extracted from source or directory structure."
-      }
-    },
-    {
-      "id": "Worldbuilding",
-      "display_name": {
-        "zh": "世界观",
-        "en": "Worldbuilding"
-      },
-      "description": {
-        "zh": "故事世界的规则、历史、地理、社会结构或超自然体系。",
-        "en": "Rules, history, geography, society, or systems of a story world."
-      }
-    },
-    {
-      "id": "CharacterCard",
-      "display_name": {
-        "zh": "人物卡",
-        "en": "Character card"
-      },
-      "description": {
-        "zh": "角色身份、动机、关系、口吻和限制。",
-        "en": "Character identity, motivation, relationships, voice, and constraints."
-      }
-    },
-    {
-      "id": "TimelineEvent",
-      "display_name": {
-        "zh": "时间线事件",
-        "en": "Timeline event"
-      },
-      "description": {
-        "zh": "故事发生顺序、历史节点或章节内关键事件。",
-        "en": "Chronological story event, historical point, or chapter event."
-      }
-    },
-    {
-      "id": "OutlineBeat",
-      "display_name": {
-        "zh": "大纲节拍",
-        "en": "Outline beat"
-      },
-      "description": {
-        "zh": "章节、场景或剧情推进节点。",
-        "en": "Chapter, scene, or plot progression beat."
-      }
-    },
-    {
-      "id": "ChapterDraft",
-      "display_name": {
-        "zh": "章节草稿",
-        "en": "Chapter draft"
-      },
-      "description": {
-        "zh": "基于已批准知识生成或整理的章节草稿。",
-        "en": "Chapter draft generated or organized from approved knowledge."
-      }
-    },
-    {
-      "id": "ForeshadowingThread",
-      "display_name": {
-        "zh": "伏笔线索",
-        "en": "Foreshadowing thread"
-      },
-      "description": {
-        "zh": "伏笔、线索、回收计划和悬念管理。",
-        "en": "Foreshadowing, clues, payoff plans, and suspense tracking."
-      }
-    },
-    {
-      "id": "ChapterKnowledge",
-      "display_name": {
-        "zh": "章节提取知识",
-        "en": "Chapter extracted knowledge"
-      },
-      "description": {
-        "zh": "从章节草稿中反向提取的候选设定或事实。",
-        "en": "Candidate facts or settings extracted from a chapter draft."
       }
     }
   ]

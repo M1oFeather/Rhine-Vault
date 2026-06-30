@@ -428,6 +428,72 @@ body {
   font-size: 16px;
 }
 
+.knowledge-guide {
+  width: min(1180px, 100%);
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: var(--radius);
+  background: #fbfdff;
+  box-shadow: 0 8px 22px rgba(18, 22, 29, 0.05);
+  padding: 12px;
+}
+
+.guide-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.guide-heading div {
+  display: grid;
+  gap: 3px;
+}
+
+.guide-heading strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.guide-heading span,
+.guide-heading small {
+  font-size: 12px;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guide-card {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 118px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 10px;
+}
+
+.guide-card strong {
+  font-size: 13px;
+}
+
+.guide-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.guide-card .el-button {
+  justify-self: start;
+  padding: 0;
+}
+
 .work-panel > form,
 .work-panel > .el-form,
 .mcp-panel,
@@ -512,55 +578,6 @@ body {
 
 .composer {
   margin-top: 0;
-}
-
-.novel-panel {
-  width: min(1280px, 100%);
-}
-
-.novel-grid,
-.novel-check-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr);
-  gap: 14px;
-  min-width: 0;
-}
-
-.novel-output pre,
-.novel-check-grid pre {
-  max-height: 520px;
-  margin: 0;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: #0f172a;
-  color: #e5edf7;
-  padding: 14px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.novel-tabs {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 12px;
-}
-
-.issue-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel-soft);
-  padding: 9px;
-  line-height: 1.55;
-}
-
-.issue-row span:last-child {
-  overflow-wrap: anywhere;
 }
 
 .phase5-table {
@@ -787,8 +804,7 @@ body {
   .node-layout,
   .review-grid,
   .graph-layout,
-  .novel-grid,
-  .novel-check-grid,
+  .guide-grid,
   .overview-strip {
     grid-template-columns: 1fr;
   }

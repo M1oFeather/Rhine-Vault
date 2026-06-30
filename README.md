@@ -156,6 +156,19 @@ python -m venv .venv
 
 默认安装只包含核心领域模型、Markdown、SQLite、正式工作流和检索能力，不强制安装 FastAPI、uvicorn 或前端工具链。
 
+Core-only 安装后的 `rhine-vault` 命令不会直接启动 Web/API 服务，而是提供轻量诊断入口：
+
+```powershell
+.\.venv\Scripts\rhine-vault.exe
+.\.venv\Scripts\rhine-vault.exe status
+.\.venv\Scripts\rhine-vault.exe paths
+.\.venv\Scripts\rhine-vault.exe version
+```
+
+也可以使用等价模块入口：`.\.venv\Scripts\python.exe -m rhine_vault.core status`。
+
+如果要启动后端与 UI，需要安装 API/WebUI/Desktop extra 后使用 `server` 子命令。
+
 ### 安装 API Server
 
 ```powershell
@@ -219,6 +232,7 @@ Desktop 层面向完整本地工作台，后续可承载更多本地文件、顶
 
 ```powershell
 .\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\rhine-vault.exe server
 ```
 
 默认运行数据会写入当前启动目录：

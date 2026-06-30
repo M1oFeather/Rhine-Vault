@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import rhine_vault.core as core
+import rhine_vault.core.runtime as core_runtime
 from rhine_vault.api.app import _resolve_ui_index_path, create_app
 from rhine_vault.runtime_paths import default_database_path, runtime_home
 
@@ -19,18 +20,71 @@ def test_root_entrypoint_adds_local_src_to_import_path() -> None:
     assert src_path in sys.path
 
 
-def test_core_main_delegates_to_server_runner(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = False
+def test_core_main_without_args_prints_core_help(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = core.main([])
 
-    def fake_run_server() -> None:
-        nonlocal called
-        called = True
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Rhine-Vault core CLI" in output
+    assert "server" in output
+    assert "status" in output
 
-    monkeypatch.setattr(core, "run_server", fake_run_server)
 
-    core.main()
+def test_core_server_command_delegates_to_server_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    called: dict[str, object] = {}
 
-    assert called
+    def fake_run_server(
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        database_path: Path | str | None = None,
+    ) -> None:
+        called["host"] = host
+        called["port"] = port
+        called["database_path"] = database_path
+
+    database_path = tmp_path / "vault.sqlite3"
+    monkeypatch.setattr(core_runtime, "run_server", fake_run_server)
+
+    exit_code = core.main(
+        [
+            "server",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9000",
+            "--database",
+            str(database_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert called == {
+        "host": "0.0.0.0",
+        "port": 9000,
+        "database_path": database_path,
+    }
+
+
+def test_core_status_command_is_available_without_starting_server(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("RHINE_VAULT_HOME", raising=False)
+    monkeypatch.delenv("RHINE_VAULT_DB", raising=False)
+
+    exit_code = core.main(["status"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "core: available" in output
+    assert f"runtime_home: {tmp_path / '.rhine'}" in output
+    assert f"database_path: {tmp_path / '.rhine' / 'rhine-vault.db'}" in output
 
 
 def test_default_runtime_paths_use_local_rhine_home(

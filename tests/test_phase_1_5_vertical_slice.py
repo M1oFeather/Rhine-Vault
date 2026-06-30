@@ -952,7 +952,7 @@ def test_fastapi_endpoints_and_api_docs(tmp_path: Path, monkeypatch: pytest.Monk
     en_node_types = client.get("/api/node-types?locale=en").json()
     assert zh_node_types["extension_policy"]["mode"] == "approval_required"
     assert zh_node_types["node_types"][1]["id"] == "Constraint"
-    assert zh_node_types["node_types"][1]["display_name"]
+    assert zh_node_types["node_types"][1]["display_name"] == "约束"
     assert en_node_types["node_types"][1]["display_name"] == "Constraint"
 
     proposal = client.post(

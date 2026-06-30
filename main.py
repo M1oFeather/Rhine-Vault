@@ -17,4 +17,5 @@ _ensure_local_src_on_path()
 from rhine_vault.core import main  # noqa: E402
 
 if __name__ == "__main__":
-    main()
+    args = sys.argv[1:] or ["server"]
+    raise SystemExit(main(args))

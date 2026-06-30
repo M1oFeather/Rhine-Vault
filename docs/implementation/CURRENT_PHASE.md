@@ -25,9 +25,6 @@ review boundaries for formal knowledge, and core-only install safety.
 - Read-only workflow state aggregation for WebUI/remote management interaction flow
 - WebUI Phase 6 controls for recovery, workflow state, node revisions and vector backend evaluation
 - Optional PDF/DOCX document text loaders that feed Capture Proposal only
-- Novel Studio WebUI plugin for worldbuilding, character cards, timelines, outlines,
-  chapter draft generation, consistency checks, foreshadowing review and chapter
-  reverse extraction.
 
 ## Hard constraints
 
@@ -49,7 +46,6 @@ review boundaries for formal knowledge, and core-only install safety.
 - Production graph API and UI surfaces.
 - PDF/DOCX/OCR import pipelines behind optional dependencies.
 - Obsidian integration and ExternalChange review loop.
-- Novel Studio WebUI/Desktop plugin slices for worldbuilding, character cards and writing workflows.
 - Cloud sync and alternative storage backends when explicitly configured.
 - Import/mount execution and restore workflows with auditable safeguards.
 
@@ -67,13 +63,12 @@ Immediate implementation focus:
 2. graph API and UI
 3. executable snapshot import workflow
 4. document/OCR import extensions
-5. Novel Studio plugin hardening, editor ergonomics and optional LLM-assisted generation
-6. Obsidian/plugin/sync integrations
+5. Obsidian/plugin/sync integrations
+6. API hardening for external product clients such as Rhine-Lore
 ```
 
-Initial PDF/DOCX text loaders and the first complete Novel Studio WebUI plugin
-slice are implemented. OCR and LLM-assisted long-form generation remain future
-capability slices.
+Initial PDF/DOCX text loaders are implemented. OCR and richer external product
+client support remain future capability slices.
 
 Do not collapse CMCC, Ptilopsis and Rhine-Vault into one runtime. Rhine-Vault
 remains the audited long-term knowledge backend.

@@ -188,56 +188,6 @@ export function importPtilopsisSeed(body: {
   return postJson("/api/seeds/ptilopsis", body);
 }
 
-export function createNovelArtifact(body: {
-  artifact_type: string;
-  title: string;
-  content: string;
-  tags: string[];
-  fields?: Record<string, unknown>;
-}): Promise<ApiRecord> {
-  return postJson("/api/novel/artifacts", {workspace_id: workspaceId, ...body});
-}
-
-export function generateNovelChapter(body: {
-  query: string;
-  project_title: string;
-  chapter_title: string;
-  chapter_number: number;
-  outline: string;
-  pov_character: string;
-  tone: string;
-  target_words: number;
-  extra_constraints: string[];
-  save_as_proposal: boolean;
-}): Promise<ApiRecord> {
-  return postJson("/api/novel/chapter/generate", {workspace_id: workspaceId, ...body});
-}
-
-export function checkNovelConsistency(body: {
-  query: string;
-  manuscript: string;
-  strictness: string;
-}): Promise<ApiRecord> {
-  return postJson("/api/novel/consistency/check", {workspace_id: workspaceId, ...body});
-}
-
-export function reviewNovelForeshadowing(body: {
-  query: string;
-  manuscript: string;
-  planned_payoffs: string[];
-}): Promise<ApiRecord> {
-  return postJson("/api/novel/foreshadowing/review", {workspace_id: workspaceId, ...body});
-}
-
-export function extractNovelChapterKnowledge(body: {
-  chapter_title: string;
-  chapter_text: string;
-  tags: string[];
-  stage: boolean;
-}): Promise<ApiRecord> {
-  return postJson("/api/novel/chapter/extract", {workspace_id: workspaceId, ...body});
-}
-
 export function scanProject(root: string): Promise<ApiRecord> {
   return postJson("/api/projects/scan", {workspace_id: workspaceId, root});
 }

@@ -5,6 +5,7 @@
 - **已确定**：可直接作为实现约束。
 - **暂定**：当前推荐方案，但后续允许调整。
 - **待讨论**：代码 Agent 不得自行定案。
+- **已取代**：历史决策，仅作为背景记录，不再作为当前实现约束。
 
 | ID | 决策 | 状态 | 说明 |
 |---|---|---|---|
@@ -67,4 +68,5 @@
 | ADR-057 | Codex Handoff Package 与数据恢复包分离 | 已确定 | 一个用于开发，一个用于数据恢复 |
 | ADR-058 | Rhine-Vault 必须支持 core-only 安装 | 已确定 | 默认 pip 安装不强制 FastAPI、uvicorn 或前端工具链；API server 作为可选 extra |
 | ADR-059 | 产品层级分为 Core / API / WebUI / Desktop | 已确定 | Core 最小可嵌入；WebUI 可扩展；Desktop 是完整本地工作台 |
-| ADR-060 | Novel Studio 作为 WebUI/Desktop 插件实现 | 已确定 | 小说生成、世界观、人物卡、章节管理属于创作工作流插件；Core 只提供知识、审核、检索和 Context Bundle 底座 |
+| ADR-060 | Novel Studio 作为 WebUI/Desktop 插件实现 | 已取代 | 被 ADR-061 取代；保留为历史背景 |
+| ADR-061 | Rhine-Lore 从 Rhine-Vault runtime 中拆出 | 已确定 | 长篇创作工作台独立成产品/仓库；Rhine-Vault 保持审计知识后端，通过 API/Context Bundle/Proposal 链路服务 Lore |

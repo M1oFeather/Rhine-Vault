@@ -28,15 +28,6 @@ from rhine_vault.i18n import (
 from rhine_vault.llm import FakeLLMProvider, OpenAICompatibleProvider
 from rhine_vault.mcp_bridge import MCPBridge
 from rhine_vault.node_types import node_type_config
-from rhine_vault.novel_studio import (
-    ChapterGenerationInput,
-    NovelArtifactInput,
-    build_consistency_report,
-    build_foreshadowing_report,
-    create_novel_artifact_proposal,
-    extract_chapter_knowledge_proposal,
-    generate_chapter_draft,
-)
 from rhine_vault.recovery import (
     apply_import_plan,
     build_import_plan,
@@ -246,45 +237,6 @@ class QueryRequest(BaseModel):
 class KnowledgeDocumentRequest(QueryRequest):
     title: str | None = None
     audience: str = "developer"
-
-
-class NovelArtifactRequest(BaseModel):
-    workspace_id: str
-    artifact_type: str
-    title: str = Field(min_length=1)
-    content: str = Field(min_length=1)
-    tags: tuple[str, ...] = ()
-    fields: dict[str, Any] = Field(default_factory=dict)
-
-
-class NovelChapterGenerateRequest(QueryRequest):
-    project_title: str = ""
-    chapter_title: str = ""
-    chapter_number: int = Field(default=1, ge=1)
-    outline: str = ""
-    pov_character: str = ""
-    tone: str = ""
-    target_words: int = Field(default=1200, ge=1, le=20000)
-    extra_constraints: tuple[str, ...] = ()
-    save_as_proposal: bool = False
-
-
-class NovelConsistencyRequest(QueryRequest):
-    manuscript: str = Field(min_length=1)
-    strictness: str = "normal"
-
-
-class NovelForeshadowingRequest(QueryRequest):
-    manuscript: str = Field(min_length=1)
-    planned_payoffs: tuple[str, ...] = ()
-
-
-class NovelChapterExtractRequest(BaseModel):
-    workspace_id: str
-    chapter_title: str = Field(min_length=1)
-    chapter_text: str = Field(min_length=1)
-    tags: tuple[str, ...] = ()
-    stage: bool = False
 
 
 class OpenAICompatibleQueryRequest(QueryRequest):
@@ -894,107 +846,6 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
             title=request.title,
             audience=request.audience,
         )
-
-    @app.post("/api/novel/artifacts")
-    def novel_artifact(request: NovelArtifactRequest) -> dict[str, Any]:
-        try:
-            return create_novel_artifact_proposal(
-                capture=capture,
-                workspace_id=request.workspace_id,
-                artifact=NovelArtifactInput(
-                    artifact_type=request.artifact_type,
-                    title=request.title,
-                    content=request.content,
-                    tags=request.tags,
-                    fields=request.fields,
-                ),
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/novel/chapter/generate")
-    def novel_chapter_generate(request: NovelChapterGenerateRequest) -> dict[str, Any]:
-        bundle = retrieve_context_bundle(
-            store=store,
-            workspace_id=request.workspace_id,
-            query=request.query,
-            profile_id=request.profile_id,
-            overrides=_overrides_from_query(request),
-        )
-        generated = generate_chapter_draft(
-            bundle,
-            generation=ChapterGenerationInput(
-                project_title=request.project_title,
-                chapter_title=request.chapter_title,
-                chapter_number=request.chapter_number,
-                outline=request.outline,
-                pov_character=request.pov_character,
-                tone=request.tone,
-                target_words=request.target_words,
-                extra_constraints=request.extra_constraints,
-            ),
-        )
-        if request.save_as_proposal:
-            proposal = capture.create_manual_proposal(
-                workspace_id=request.workspace_id,
-                title=str(generated["title"]),
-                node_type="ChapterDraft",
-                content=str(generated["markdown"]),
-                authority="experimental",
-                tags=("novel", "chapter", "draft"),
-            )
-            generated["proposal"] = proposal
-        return generated
-
-    @app.post("/api/novel/consistency/check")
-    def novel_consistency_check(request: NovelConsistencyRequest) -> dict[str, Any]:
-        bundle = retrieve_context_bundle(
-            store=store,
-            workspace_id=request.workspace_id,
-            query=request.query,
-            profile_id=request.profile_id,
-            overrides=_overrides_from_query(request),
-        )
-        return build_consistency_report(
-            bundle,
-            manuscript=request.manuscript,
-            strictness=request.strictness,
-        )
-
-    @app.post("/api/novel/foreshadowing/review")
-    def novel_foreshadowing_review(request: NovelForeshadowingRequest) -> dict[str, Any]:
-        bundle = retrieve_context_bundle(
-            store=store,
-            workspace_id=request.workspace_id,
-            query=request.query,
-            profile_id=request.profile_id,
-            overrides=_overrides_from_query(request),
-        )
-        return build_foreshadowing_report(
-            bundle,
-            manuscript=request.manuscript,
-            planned_payoffs=request.planned_payoffs,
-        )
-
-    @app.post("/api/novel/chapter/extract")
-    def novel_chapter_extract(request: NovelChapterExtractRequest) -> dict[str, Any]:
-        proposal = extract_chapter_knowledge_proposal(
-            capture=capture,
-            workspace_id=request.workspace_id,
-            chapter_title=request.chapter_title,
-            chapter_text=request.chapter_text,
-            tags=request.tags,
-        )
-        staging: list[dict[str, Any]] = []
-        if request.stage:
-            staging = store.save_staging(
-                workspace_id=request.workspace_id,
-                proposal_id=proposal["proposal_id"],
-                temporary_ids=tuple(
-                    str(node["temporary_id"]) for node in proposal["proposed_nodes"]
-                ),
-            )
-        return {"proposal": proposal, "staging": staging}
 
     @app.get("/api/retrieval/profiles")
     def retrieval_profiles(workspace_id: str = "demo-workspace") -> dict[str, Any]:

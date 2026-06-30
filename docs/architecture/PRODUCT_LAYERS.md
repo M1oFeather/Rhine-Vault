@@ -51,7 +51,7 @@ Responsibilities:
 - CLI-launched local/remote management panel;
 - plugin-capable UI shell;
 - worldbuilding generator workflows;
-- novel writing and project management workflows;
+- external product integration helpers for creative tools such as Rhine-Lore;
 - lightweight bot/robot integration helpers where the adapter lives in the bot framework or a separate adapter package;
 - cross-model knowledge curation workflows, such as extracting knowledge from ChatGPT/Gemini/manual chat and serving approved Context Bundles to DeepSeek;
 - documentation generation workflows based on approved knowledge;
@@ -104,16 +104,18 @@ Plugins should target the lowest layer that can support them:
 - management workflows: WebUI;
 - local file/editor automation: Desktop;
 - bot framework adapters: external adapter packages that call Core/API; WebUI should provide lightweight status/test/config helpers, not own the bot runtime;
-- cross-model knowledge curation and documentation generation: WebUI plugins, with Desktop adding richer local editing and preview.
+- cross-model knowledge curation and documentation generation: WebUI plugins, with Desktop adding richer local editing and preview;
+- creative authoring products such as Rhine-Lore: external applications that call Rhine-Vault through stable API and Context Bundle contracts.
 
 This keeps Core lightweight while allowing WebUI and Desktop to become rich product surfaces.
 
-## Novel Studio Plugin
+## Rhine-Lore Boundary
 
-Novel generation and writing management should start as a Rhine-Vault WebUI plugin, not as
-Core behavior and not as a separate repository by default.
+Long-form novel generation and writing management has been split out of the Rhine-Vault
+runtime as Rhine-Lore. Rhine-Lore may be a separate product or repository, while
+Rhine-Vault remains the audited knowledge backend.
 
-Responsibilities:
+Rhine-Lore owns:
 
 - worldbuilding libraries;
 - character cards and relationship maps;
@@ -122,15 +124,16 @@ Responsibilities:
 - chapter planning and draft generation;
 - consistency checks against approved knowledge;
 - foreshadowing and callback tracking;
-- chapter-to-knowledge extraction that produces Capture Proposals or staging candidates.
+- chapter-to-knowledge extraction UX.
 
-Novel Studio may add WebUI-specific Python orchestration when generation, consistency checks or
-document projection need server-side support. Formal knowledge still enters Rhine-Vault through
-Capture Proposal, staging and human approval.
+Rhine-Vault owns:
 
-Desktop may extend Novel Studio with richer local file operations, a longer-form editor, project
-tree management, local preview and export tools.
+- approved MemoryNode storage;
+- Source, Proposal, staging and human approval workflow;
+- retrieval, Context Bundle assembly and source citations;
+- API contracts used by Rhine-Lore;
+- optional WebUI diagnostics for the integration.
 
-Novel Studio can become a separate product later only if it grows beyond a Rhine-Vault plugin into
-an independent writing application. Even then, Rhine-Vault should remain the audited knowledge
-backend rather than duplicating formal knowledge storage.
+Rhine-Lore must not bypass Rhine-Vault's formal knowledge boundary. Any chapter-to-knowledge
+or worldbuilding-to-knowledge extraction should create Capture Proposals or staging candidates,
+then enter formal knowledge only through human approval.
